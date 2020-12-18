@@ -16,11 +16,12 @@ fn test_create_user_function() {
 
     let pf = fs::read_to_string(&p.path).unwrap();
 
-    let mf = umanux::Files {
-        passwd: Some(p.path.clone()),
-        shadow: Some(s.path),
-        group: Some(g.path),
-    };
+    let mf = umanux::Files::new(
+        &p.path.to_string_lossy(),
+        &s.path.to_string_lossy(),
+        &g.path.to_string_lossy(),
+    )
+    .unwrap();
 
     let mut db = umanux::UserDBLocal::load_files(mf).unwrap();
 

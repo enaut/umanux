@@ -1,8 +1,8 @@
 extern crate umanux;
-use umanux::api::GroupRead;
 use umanux::api::UserDBRead;
+use umanux::{api::GroupRead, UserLibError};
 
-fn main() {
+fn main() -> Result<(), UserLibError> {
     simplelog::CombinedLogger::init(vec![simplelog::TermLogger::new(
         simplelog::LevelFilter::Warn,
         simplelog::Config::default(),
@@ -10,7 +10,7 @@ fn main() {
     )])
     .unwrap();
 
-    let db = umanux::UserDBLocal::load_files(umanux::Files::default()).unwrap();
+    let db = umanux::UserDBLocal::load_files(umanux::Files::default()?)?;
 
     for u in db.get_all_users() {
         println!("{}", u);
@@ -28,9 +28,9 @@ fn main() {
         );
     }
 
-    for group in db.get_all_groups() {
+    Ok(for group in db.get_all_groups() {
         let gp = group.borrow();
         println!("{}", gp);
         println!("{:?}", gp.get_member_names())
-    }
+    })
 }

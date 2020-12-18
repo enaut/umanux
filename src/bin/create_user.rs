@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 extern crate clap;
 use clap::{App, Arg};
 
@@ -48,11 +46,11 @@ fn main() -> Result<(), UserLibError> {
         )
         .get_matches();
 
-    let mf = umanux::Files {
-        passwd: Some(PathBuf::from(matches.value_of("passwd").unwrap())),
-        shadow: Some(PathBuf::from(matches.value_of("shadow").unwrap())),
-        group: Some(PathBuf::from(matches.value_of("group").unwrap())),
-    };
+    let mf = umanux::Files::new(
+        matches.value_of("passwd").unwrap(),
+        matches.value_of("shadow").unwrap(),
+        matches.value_of("group").unwrap(),
+    )?;
 
     let mut db = umanux::UserDBLocal::load_files(mf).unwrap();
 

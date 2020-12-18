@@ -21,6 +21,7 @@ chrono = "0.4"
 env_logger = "0.8"
 derive_builder = "0.9"
 clap = "3.0.0-beta"
+difference = "2.0"
 
 [dev-dependencies]
 tempfile = "3.1"

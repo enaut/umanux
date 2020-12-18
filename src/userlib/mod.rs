@@ -19,8 +19,7 @@ use std::io::{BufReader, Read};
 pub type UserList = HashMap<String, crate::User>;
 
 pub struct UserDBLocal {
-    source_files: files::Files,
-    source_hashes: hashes::Hashes, // to detect changes
+    source_files: Option<files::Files>,
     pub users: UserList,
     pub groups: Vec<crate::Group>,
 }
@@ -39,18 +38,13 @@ impl UserDBLocal {
         shadow_to_users(&mut users, shadow_entries);
         groups_to_users(&mut users, &mut groups);
         Self {
-            source_files: files::Files {
-                passwd: None,
-                group: None,
-                shadow: None,
-            },
+            source_files: None,
             users,
             groups,
-            source_hashes: hashes::Hashes::new(passwd_content, shadow_content, group_content),
         }
     }
 
-    /// Import the database from a [`Files`] struct
+    /// Import the database from a [`umanux::userlib::files::Files`] struct
     pub fn load_files(files: files::Files) -> Result<Self, crate::UserLibError> {
         // Get the Strings for the files use an inner block to drop references after read.
         let (my_passwd_lines, my_shadow_lines, my_group_lines) = {
@@ -70,10 +64,9 @@ impl UserDBLocal {
         shadow_to_users(&mut users, passwds);
         groups_to_users(&mut users, &mut groups);
         Ok(Self {
-            source_files: files,
+            source_files: Some(files),
             users,
             groups,
-            source_hashes: hashes::Hashes::new(&my_passwd_lines, &my_shadow_lines, &my_group_lines),
         })
     }
     fn delete_from_passwd(
@@ -165,7 +158,7 @@ impl UserDBLocal {
         }
     }
 
-    fn delete_group_by_id(&mut self, gid: u32) {
+    pub fn delete_group_by_id(&mut self, gid: u32) {
         self.groups
             .retain(|g| g.borrow().get_gid().expect("groups have to have a gid") != gid);
     }
@@ -176,13 +169,13 @@ impl UserDBWrite for UserDBLocal {
         // try to get the user from the database
         let user_opt = self.get_user_by_name(args.username);
         let user = match user_opt {
-            Some(user) => user,
+            Some(user) => user.clone(),
             None => {
                 return Err(UserLibError::NotFound);
             }
         };
 
-        if self.source_files.is_virtual() {
+        if self.source_files.is_none() {
             warn!("There are no associated files working in dummy mode!");
             let res = self.users.remove(args.username);
             match res {
@@ -190,91 +183,89 @@ impl UserDBWrite for UserDBLocal {
                 None => Err(UserLibError::NotFound), // should not happen anymore as existence is checked.
             }
         } else {
-            let opened = self.source_files.lock_all_get();
-            let (mut locked_p, mut locked_s, mut locked_g) = opened.expect("failed to lock files!");
+            let (mut locked_p, mut locked_s, mut locked_g) = {
+                let opened = self.source_files.as_ref().unwrap().lock_all_get();
+                opened.expect("failed to lock files!")
+            };
 
             // read the files to strings
             let passwd_file_content = file_to_string(&locked_p.file)?;
             let shadow_file_content = file_to_string(&locked_s.file)?;
             let group_file_content = file_to_string(&locked_g.file)?;
-
-            let src = &self.source_hashes;
-            if src.passwd.has_changed(&passwd_file_content)
-                | src.shadow.has_changed(&shadow_file_content)
-            {
-                error!("The source files have changed. Deleting the user could corrupt the userdatabase. Aborting!");
-                Err(format!("The userdatabase has been changed {}", args.username).into())
-            } else {
-                Self::delete_from_passwd(user, &passwd_file_content, &mut locked_p)?;
-                Self::delete_from_shadow(user, &shadow_file_content, &mut locked_s)?;
-                if args.delete_home == DeleteHome::Delete {
-                    Self::delete_home(user)?;
-                }
-                trace!("The users groups: {:#?}", user.get_groups());
-                // Iterate over the GIDs to avoid borrowing issues
-                let users_groups: Vec<(MembershipKind, u32)> = user
-                    .get_groups()
-                    .iter()
-                    .map(|(k, g)| (*k, g.borrow().get_gid().unwrap()))
-                    .collect();
-                for (kind, group) in users_groups {
-                    trace!("Woring on group: {:?} - {}", kind, group);
-                    match kind {
-                        crate::group::MembershipKind::Primary => {
-                            if self
-                                .get_group_by_id(group)
-                                .expect("The group does not exist")
-                                .borrow()
-                                .get_member_names()
-                                .expect("this group allways has a member")
-                                .len()
-                                == 1
-                            {
-                                trace!(
-                                    "Deleting group as the user to be deleted is the only member {}", self
-                                    .get_group_by_id(group)
+            Self::delete_from_passwd(&user, &passwd_file_content, &mut locked_p)?;
+            Self::delete_from_shadow(&user, &shadow_file_content, &mut locked_s)?;
+            if args.delete_home == DeleteHome::Delete {
+                Self::delete_home(&user)?;
+            }
+            trace!("The users groups: {:#?}", user.get_groups());
+            // Iterate over the GIDs to avoid borrowing issues
+            let users_groups: Vec<(MembershipKind, u32)> = user
+                .get_groups()
+                .iter()
+                .map(|(k, g)| (*k, g.borrow().get_gid().unwrap()))
+                .collect();
+            for (kind, group) in users_groups {
+                trace!("Woring on group: {:?} - {}", kind, group);
+                match kind {
+                    crate::group::MembershipKind::Primary => {
+                        if self
+                            .get_group_by_id(group)
+                            .expect("The group does not exist")
+                            .borrow()
+                            .get_member_names()
+                            .expect("this group allways has a member")
+                            .len()
+                            == 1
+                        {
+                            trace!(
+                                "Deleting group as the user to be deleted is the only member {}",
+                                self.get_group_by_id(group)
                                     .expect("The group does not exist")
                                     .borrow()
-                                    .get_groupname().expect("a group has to have a name")
-                                );
-                                Self::delete_from_group(
-                                    self.get_group_by_id(group)
-                                        .expect("The group does not exist"),
-                                    &group_file_content,
-                                    &mut locked_g,
-                                )?;
-                                self.delete_group_by_id(group);
-                            } else {
-                                // remove the from the group instead of deleting the group if he was not the only user in its primary group.
-                                if let Some(group) = self.get_group_by_id(group) {
-                                    group
-                                        .borrow_mut()
-                                        .remove_member(MembershipKind::Primary, args.username)
-                                };
-                                self.write_groups(&mut locked_g)?;
-                                warn!(
-                                    "The primary group (GID: {}) was not empty and is thus not removed. Only the membership has been removed",
-                                    group
-                                );
-                            }
-                        }
-                        crate::group::MembershipKind::Member => {
-                            trace!("delete the membership in the group");
+                                    .get_groupname()
+                                    .expect("a group has to have a name")
+                            );
+                            Self::delete_from_group(
+                                self.get_group_by_id(group)
+                                    .expect("The group does not exist"),
+                                &group_file_content,
+                                &mut locked_g,
+                            )?;
+                            // remove the group from the groups Vec
+                            self.groups.retain(|g| {
+                                g.borrow().get_gid().expect("groups have to have a gid") != group
+                            });
+                        } else {
+                            // remove the membership from the group instead of deleting the group if he was not the only user in its primary group.
                             if let Some(group) = self.get_group_by_id(group) {
                                 group
                                     .borrow_mut()
-                                    .remove_member(MembershipKind::Member, args.username)
+                                    .remove_member(MembershipKind::Primary, args.username)
                             };
                             self.write_groups(&mut locked_g)?;
+                            warn!(
+                                    "The primary group (GID: {}) was not empty and is thus not removed. Only the membership has been removed",
+                                    group
+                                );
                         }
                     }
+                    crate::group::MembershipKind::Member => {
+                        trace!("delete the membership in the group");
+                        if let Some(group) = self.get_group_by_id(group) {
+                            group
+                                .borrow_mut()
+                                .remove_member(MembershipKind::Member, args.username);
+                            trace!("The new group: {:?}", group.borrow());
+                        };
+                        self.write_groups(&mut locked_g)?;
+                    }
                 }
-                // Remove the user from the memory database(HashMap)
-                let res = self.users.remove(args.username);
-                match res {
-                    Some(u) => Ok(u),
-                    None => Err("Failed to remove the user from the internal HashMap".into()),
-                }
+            }
+            // Remove the user from the memory database(HashMap)
+            let res = self.users.remove(args.username);
+            match res {
+                Some(u) => Ok(u),
+                None => Err("Failed to remove the user from the internal HashMap".into()),
             }
         }
     }
@@ -288,16 +279,20 @@ impl UserDBWrite for UserDBLocal {
             if self.users.contains_key(args.username) {
                 Err("Failed to create the user. A user with the same Name already exists".into())
             } else {
-                let opened = self.source_files.lock_all_get();
-                let (mut locked_p, mut locked_s, mut _locked_g) =
-                    opened.expect("failed to lock files!");
-                //dbg!(&locked_p);
-                locked_p.append(format!("{}", new_user))?;
-                if let Some(shadow) = new_user.get_shadow() {
-                    info!("Adding shadow entry {}", shadow);
-                    locked_s.append(format!("{}", shadow))?;
+                if self.source_files.is_some() {
+                    let opened = self.source_files.as_ref().unwrap().lock_all_get();
+                    let (mut locked_p, mut locked_s, mut _locked_g) =
+                        opened.expect("failed to lock files!");
+                    //dbg!(&locked_p);
+                    locked_p.append(format!("{}", new_user))?;
+                    if let Some(shadow) = new_user.get_shadow() {
+                        info!("Adding shadow entry {}", shadow);
+                        locked_s.append(format!("{}", shadow))?;
+                    } else {
+                        warn!("Omitting shadow entry!")
+                    }
                 } else {
-                    warn!("Omitting shadow entry!")
+                    warn!("Working without database files this change cannot be stored.")
                 }
                 assert!(self
                     .users
