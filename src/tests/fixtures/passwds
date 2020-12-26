@@ -1,0 +1,4 @@
+root:x:0:0:root:/root:/bin/bash
+test:x:1001:1015:Long,007,1499990,1999201,AKK:/home/test:/bin/bash
+teste:x:1002:1002::/home/teste:/bin/bash
+bergfried:x:1009:1002:Bergfried Freiberg,,,,:/home/bergfried:/bin/bash

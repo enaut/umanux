@@ -1,10 +1,9 @@
+use umanux::Fixture;
+
 extern crate umanux;
-mod testfiles;
 
 #[test]
 fn test_delete_user_function() {
-    use testfiles::Fixture;
-
     use umanux::api::{GroupRead, UserDBRead, UserDBWrite, UserRead};
 
     let p = Fixture::copy("passwd");
@@ -20,7 +19,7 @@ fn test_delete_user_function() {
     )
     .unwrap();
 
-    let mut db = umanux::UserDBLocal::load_files(mf.clone()).unwrap();
+    let mut db = umanux::UserDBLocal::load_files(mf).unwrap();
 
     let user_res: Result<umanux::User, umanux::UserLibError> = db.delete_user(
         umanux::api::DeleteUserArgs::builder()
@@ -29,11 +28,14 @@ fn test_delete_user_function() {
             .build()
             .unwrap(),
     );
-    //assert_eq!(user_res, Err("".into()));
+
     let pf2 = std::fs::read_to_string(&p.path).unwrap();
+
+    // check that the user that has been deleted is indeed teste
     assert_eq!(user_res.unwrap().get_username().unwrap(), "teste");
     let pflines = pf.lines();
     let pflines2 = pf2.lines();
+    // check that the teste user has been deleted
     for (l1, l2) in pflines.zip(pflines2.clone()) {
         if l1 != l2 {
             assert!(l1.starts_with("teste"));
@@ -47,10 +49,10 @@ fn test_delete_user_function() {
     let groupfile2 = std::fs::read_to_string(&g.path).unwrap();
     let groupfilelines2 = groupfile2.lines();
     for line in groupfilelines2 {
-        println!("{}", &line);
         assert!(!line.ends_with("teste"))
     }
 
+    // delete the user test
     let user_res_test: Result<umanux::User, umanux::UserLibError> = db.delete_user(
         umanux::api::DeleteUserArgs::builder()
             .username("test")
@@ -58,19 +60,20 @@ fn test_delete_user_function() {
             .build()
             .unwrap(),
     );
-    println!("{:?}", user_res_test);
+
+    // check that the user has indeed been deleted and its name is test.
     if let Ok(u) = user_res_test {
         assert_eq!(u.get_username(), Some("test"))
     } else {
         panic!("The user was not deleted")
     }
-    let mf = umanux::Files::new(
+    let mf_after = umanux::Files::new(
         &p.path.to_string_lossy(),
         &s.path.to_string_lossy(),
         &g.path.to_string_lossy(),
     )
     .unwrap();
-    let parsed_again = umanux::UserDBLocal::load_files(mf.clone()).unwrap();
+    let parsed_again = umanux::UserDBLocal::load_files(mf_after).unwrap();
     let group = parsed_again
         .get_group_by_id(1002)
         .expect("this group should exist");

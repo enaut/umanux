@@ -18,7 +18,7 @@ impl Fixture {
         // First, figure out the right file in `tests/fixtures/`:
         let root_dir = &env::var("CARGO_MANIFEST_DIR").expect("$CARGO_MANIFEST_DIR");
         let mut source = PathBuf::from(root_dir);
-        source.push("tests/fixtures");
+        source.push("src/tests/fixtures");
         source.push(&fixture_filename);
 
         // The "real" path of the file is going to be under a temporary directory:

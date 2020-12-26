@@ -28,9 +28,11 @@ fn main() -> Result<(), UserLibError> {
         );
     }
 
-    Ok(for group in db.get_all_groups() {
+    let gr_res = db.get_all_groups();
+    for group in gr_res {
         let gp = group.borrow();
         println!("{}", gp);
         println!("{:?}", gp.get_member_names())
-    })
+    }
+    Ok(())
 }

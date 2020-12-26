@@ -12,9 +12,11 @@ use crate::{
 };
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufReader, Read};
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{BufReader, Read},
+};
 
 pub type UserList = HashMap<String, crate::User>;
 
@@ -51,9 +53,9 @@ impl UserDBLocal {
             let opened = files.lock_all_get();
             let (locked_p, locked_s, locked_g) = opened.expect("failed to lock files!");
             // read the files to strings
-            let p = file_to_string(&locked_p.file)?;
-            let s = file_to_string(&locked_s.file)?;
-            let g = file_to_string(&locked_g.file)?;
+            let p = file_to_string(&locked_p.file.borrow_mut())?;
+            let s = file_to_string(&locked_s.file.borrow_mut())?;
+            let g = file_to_string(&locked_g.file.borrow_mut())?;
             // return the strings to the outer scope and release the lock...
             (p, s, g)
         };
@@ -71,13 +73,13 @@ impl UserDBLocal {
     }
     fn delete_from_passwd(
         user: &crate::User,
-        passwd_file_content: &str,
         locked_p: &mut files::LockedFileGuard,
     ) -> Result<(), UserLibError> {
-        let modified_p = user.remove_in(passwd_file_content);
+        let passwd_file_content = file_to_string(&locked_p.file.borrow_mut())?;
+        let modified_p = user.remove_in(&passwd_file_content);
 
         // write the new content to the file.
-        let ncont = locked_p.replace_contents(modified_p);
+        let ncont = locked_p.replace_contents(&modified_p);
         match ncont {
             Ok(_) => Ok(()),
             Err(e) => Err(format!("Failed to write the passwd database: {}", e).into()),
@@ -86,18 +88,18 @@ impl UserDBLocal {
 
     fn delete_from_shadow(
         user: &crate::User,
-        shadow_file_content: &str,
         locked_s: &mut files::LockedFileGuard,
     ) -> Result<(), UserLibError> {
         let shad = user.get_shadow();
+        let shadow_file_content = file_to_string(&locked_s.file.borrow_mut())?;
         match shad {
             Some(shadow) => {
-                let modified_s = shadow.remove_in(shadow_file_content);
-                let ncont = locked_s.replace_contents(modified_s);
+                let modified_s = shadow.remove_in(&shadow_file_content);
+                let ncont = locked_s.replace_contents(&modified_s);
                 match ncont {
                     Ok(_) => Ok(()),
                     Err(e) => Err(format!(
-                        "Error during write to the database. \
+                        "Error during write to the shadow database. \
                     Please doublecheck as the shadowdatabase could be corrupted: {}",
                         e,
                     )
@@ -110,11 +112,12 @@ impl UserDBLocal {
 
     fn delete_from_group(
         group: &crate::Group,
-        group_file_content: &str,
         locked_g: &mut files::LockedFileGuard,
     ) -> Result<(), UserLibError> {
-        let modified_g = group.borrow().remove_in(group_file_content);
-        let replace_result = locked_g.replace_contents(modified_g);
+        let group_file_content = file_to_string(&locked_g.file.borrow_mut())?;
+        let modified_g = group.borrow().remove_in(&group_file_content);
+
+        let replace_result = locked_g.replace_contents(&modified_g);
         match replace_result {
             Ok(_) => Ok(()),
             Err(e) => Err(format!(
@@ -133,7 +136,7 @@ impl UserDBLocal {
             .map(|g| (g.borrow().to_string()))
             .collect::<Vec<String>>()
             .join("\n");
-        let replace_result = locked_g.replace_contents(content);
+        let replace_result = locked_g.replace_contents(&content);
         match replace_result {
             Ok(_) => Ok(()),
             Err(e) => Err(format!(
@@ -188,15 +191,13 @@ impl UserDBWrite for UserDBLocal {
                 opened.expect("failed to lock files!")
             };
 
-            // read the files to strings
-            let passwd_file_content = file_to_string(&locked_p.file)?;
-            let shadow_file_content = file_to_string(&locked_s.file)?;
-            let group_file_content = file_to_string(&locked_g.file)?;
-            Self::delete_from_passwd(&user, &passwd_file_content, &mut locked_p)?;
-            Self::delete_from_shadow(&user, &shadow_file_content, &mut locked_s)?;
+            Self::delete_from_passwd(&user, &mut locked_p)?;
+            //locked_p.print_difference()?;
+            Self::delete_from_shadow(&user, &mut locked_s)?;
             if args.delete_home == DeleteHome::Delete {
                 Self::delete_home(&user)?;
             }
+            //locked_p.print_difference()?;
             trace!("The users groups: {:#?}", user.get_groups());
             // Iterate over the GIDs to avoid borrowing issues
             let users_groups: Vec<(MembershipKind, u32)> = user
@@ -228,7 +229,6 @@ impl UserDBWrite for UserDBLocal {
                             Self::delete_from_group(
                                 self.get_group_by_id(group)
                                     .expect("The group does not exist"),
-                                &group_file_content,
                                 &mut locked_g,
                             )?;
                             // remove the group from the groups Vec

@@ -1,17 +1,19 @@
 use std::{
-    io::Seek,
-    io::SeekFrom,
+    cell::RefCell,
+    fs::{File, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    ops::Deref,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
+use difference::Difference;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use std::fs::{File, OpenOptions};
-use std::io::Read;
-use std::io::Write;
-use std::ops::Deref;
 
 use crate::UserLibError;
+
+use super::file_to_string;
 
 #[derive(Debug, Clone)]
 struct ChangeTrackingPath {
@@ -20,11 +22,12 @@ struct ChangeTrackingPath {
 }
 
 #[derive(Debug, Clone)]
-pub struct OldContent(String);
+pub struct OldContent(RefCell<String>);
 
 impl OldContent {
-    pub fn new(content: String) -> Self {
-        Self(content)
+    #[must_use]
+    pub const fn new(content: String) -> Self {
+        Self(RefCell::new(content))
     }
 }
 
@@ -36,12 +39,13 @@ impl ChangeTrackingPath {
 
         let mut original_buf = String::new();
         lck.opened_file.read_to_string(&mut original_buf)?;
+        lck.opened_file.seek(SeekFrom::Start(0))?;
 
         info!("Manually removing lock on {:?}", lck.lockpath);
         std::fs::remove_file(lck.lockpath).unwrap();
 
         Ok(Self {
-            old_content: OldContent::new(original_buf),
+            old_content: OldContent::new(original_buf.trim().to_owned()),
             path: Some(lck.filepath),
         })
     }
@@ -55,43 +59,41 @@ struct LockedFileResult {
 
 #[derive(Debug, Clone)]
 pub struct Files {
-    passwd: ChangeTrackingPath,
-    shadow: ChangeTrackingPath,
-    group: ChangeTrackingPath,
+    passwd: Rc<ChangeTrackingPath>,
+    shadow: Rc<ChangeTrackingPath>,
+    group: Rc<ChangeTrackingPath>,
 }
 
 impl Files {
     /// use the default Linux `/etc/` paths
-    #[must_use]
     pub fn default() -> Result<Self, UserLibError> {
         Ok(Self {
-            passwd: ChangeTrackingPath::new("/etc/passwd")?,
-            shadow: ChangeTrackingPath::new("/etc/shadow")?,
-            group: ChangeTrackingPath::new("/etc/group")?,
+            passwd: Rc::new(ChangeTrackingPath::new("/etc/passwd")?),
+            shadow: Rc::new(ChangeTrackingPath::new("/etc/shadow")?),
+            group: Rc::new(ChangeTrackingPath::new("/etc/group")?),
         })
     }
 
-    #[must_use]
     pub fn new(
         passwd_path: &str,
         shadow_path: &str,
         group_path: &str,
     ) -> Result<Self, UserLibError> {
         Ok(Self {
-            passwd: ChangeTrackingPath::new(passwd_path)?,
-            shadow: ChangeTrackingPath::new(shadow_path)?,
-            group: ChangeTrackingPath::new(group_path)?,
+            passwd: Rc::new(ChangeTrackingPath::new(passwd_path)?),
+            shadow: Rc::new(ChangeTrackingPath::new(shadow_path)?),
+            group: Rc::new(ChangeTrackingPath::new(group_path)?),
         })
     }
     /// Check if all the files are defined. Because some operations require the files to be present
     #[must_use]
-    pub const fn is_virtual(&self) -> bool {
+    pub fn is_virtual(&self) -> bool {
         !(self.group.path.is_some() & self.passwd.path.is_some() & self.shadow.path.is_some())
     }
 
     pub fn lock_all_get(
         &self,
-    ) -> Result<(LockedFileGuard, LockedFileGuard, LockedFileGuard), crate::UserLibError> {
+    ) -> Result<(LockedFileGuard, LockedFileGuard, LockedFileGuard), UserLibError> {
         if self.passwd.path.is_some() && self.shadow.path.is_some() && self.group.path.is_some() {
             let pwd = self.lock_guarded_passwd()?;
             let shd = self.lock_guarded_shadow()?;
@@ -125,7 +127,7 @@ impl Files {
     /// * try to delete the lockfile as it is apparently not used by the process anmore. (cleanup)
     /// * try to lock again now that the old logfile has been safely removed.
     /// * remove the original file and only keep the lock hardlink
-    fn try_to_lock_file(path: &Path) -> Result<LockedFileResult, crate::UserLibError> {
+    fn try_to_lock_file(path: &Path) -> Result<LockedFileResult, UserLibError> {
         info!("locking file {}", path.to_string_lossy());
         let mut tempfilepath_const = path.to_owned();
         // get the pid
@@ -238,34 +240,35 @@ impl Files {
         }
         Err("was not able to lock!".into())
     }
-    fn lock_guarded_passwd(&self) -> Result<LockedFileGuard, crate::UserLibError> {
+    fn lock_guarded_passwd(&self) -> Result<LockedFileGuard, UserLibError> {
         let mut lck = Self::try_to_lock_file(self.passwd.path.as_ref().unwrap())?;
-        let old_content = &self.passwd.old_content.0;
+        let old_content = &*self.passwd.old_content.0.borrow();
         Self::check_if_dirty(old_content, &mut lck.opened_file)?;
+
         Ok(LockedFileGuard {
             lockfile: lck.lockpath,
-            path: self.passwd.clone(),
-            file: lck.opened_file,
+            path: Rc::clone(&self.passwd),
+            file: RefCell::new(lck.opened_file),
         })
     }
-    fn lock_guarded_shadow(&self) -> Result<LockedFileGuard, crate::UserLibError> {
-        let mut lck = Self::try_to_lock_file(&self.shadow.path.as_ref().unwrap())?;
-        let old_content = &self.shadow.old_content.0;
+    fn lock_guarded_shadow(&self) -> Result<LockedFileGuard, UserLibError> {
+        let mut lck = Self::try_to_lock_file(self.shadow.path.as_ref().unwrap())?;
+        let old_content = &*self.shadow.old_content.0.borrow();
         Self::check_if_dirty(old_content, &mut lck.opened_file)?;
         Ok(LockedFileGuard {
             lockfile: lck.lockpath,
-            path: self.shadow.clone(),
-            file: lck.opened_file,
+            path: Rc::clone(&self.shadow),
+            file: RefCell::new(lck.opened_file),
         })
     }
-    fn lock_guarded_group(&self) -> Result<LockedFileGuard, crate::UserLibError> {
-        let mut lck = Self::try_to_lock_file(&self.group.path.as_ref().unwrap())?;
-        let old_content = &self.group.old_content.0;
+    fn lock_guarded_group(&self) -> Result<LockedFileGuard, UserLibError> {
+        let mut lck = Self::try_to_lock_file(self.group.path.as_ref().unwrap())?;
+        let old_content = &*self.group.old_content.0.borrow();
         Self::check_if_dirty(old_content, &mut lck.opened_file)?;
         Ok(LockedFileGuard {
             lockfile: lck.lockpath,
-            path: self.group.clone(),
-            file: lck.opened_file,
+            path: Rc::clone(&self.group),
+            file: RefCell::new(lck.opened_file),
         })
     }
 
@@ -274,13 +277,11 @@ impl Files {
         file.seek(SeekFrom::Start(0))?;
         match file.read_to_string(&mut buf) {
             Ok(_) => {
-                if original.eq(&buf) {
+                let buf = buf.trim().to_string();
+                if original.trim().eq(&buf) {
                     file.seek(SeekFrom::Start(0))?;
                     Ok(())
                 } else {
-                    println!("{}", difference::Changeset::new(original, &buf, ""));
-                    //println!("Original:\n{}\nNew\n{}", original, &buf);
-
                     Err(
                         "The file has been modified by another process. Abort to avoid corruption."
                             .into(),
@@ -295,8 +296,8 @@ impl Files {
 #[derive(Debug)]
 pub struct LockedFileGuard {
     lockfile: PathBuf,
-    path: ChangeTrackingPath,
-    pub(crate) file: File,
+    path: Rc<ChangeTrackingPath>,
+    pub(crate) file: RefCell<File>,
 }
 
 #[derive(Debug)]
@@ -310,51 +311,129 @@ impl Drop for TempLockFile {
         std::fs::remove_file(&self.tlf).unwrap();
     }
 }
+
 impl Deref for TempLockFile {
     type Target = PathBuf;
     fn deref(&self) -> &PathBuf {
         &self.tlf
     }
 }
+
 impl LockedFileGuard {
-    pub fn replace_contents(&mut self, new_content: String) -> Result<(), crate::UserLibError> {
-        self.file = match File::create(&self.path.path.as_ref().unwrap()) {
-            Ok(file) => file,
+    pub fn print_difference(&self) -> Result<bool, UserLibError> {
+        self.file.borrow_mut().seek(SeekFrom::Start(0))?;
+        let new_content = file_to_string(&self.file.borrow_mut())?;
+        let diffs =
+            difference::Changeset::new(&self.path.old_content.0.borrow(), &new_content, "\n");
+        let filtered = diffs
+            .diffs
+            .iter()
+            .filter(|v| match v {
+                Difference::Same(_) => false,
+                Difference::Add(_) | Difference::Rem(_) => true,
+            })
+            .collect::<Vec<&Difference>>();
+        println!(
+            "\n\nPrinting the difference for {} \n\t{:?}",
+            self.lockfile.to_string_lossy(),
+            filtered
+        );
+        Ok(filtered.len() == 1)
+    }
+    pub fn replace_contents(&mut self, new_content: &str) -> Result<(), UserLibError> {
+        // TODO: File read write permissions needed
+        self.file = match OpenOptions::new()
+            .truncate(true)
+            .read(true)
+            .write(true)
+            .open(&self.path.path.as_ref().unwrap())
+        {
+            Ok(file) => RefCell::new(file),
             Err(e) => return Err(("Failed to truncate file.".to_owned(), e).into()),
         };
-        match self.file.write_all(&new_content.into_bytes()) {
+        match self
+            .file
+            .borrow_mut()
+            .write_all(&new_content.to_owned().into_bytes())
+        {
             Ok(_) => (),
             Err(e) => return Err(("Could not write (all) users. ".to_owned(), e).into()),
         };
-        let _ = self.file.write(b"\n");
+        self.file.borrow_mut().write_all(b"\n")?;
+        self.file.borrow_mut().flush()?;
+
+        let mut s = self.path.old_content.0.borrow_mut();
+        // update the new content as this is guaranteed to be correct.
+        s.clear();
+        s.push_str(new_content.trim());
+        drop(s);
         Ok(())
     }
 
-    pub fn append(&mut self, appendee: String) -> Result<(), crate::UserLibError> {
+    pub fn append(&mut self, appendee: String) -> Result<(), UserLibError> {
         // Seek to the last character.
-        self.file.seek(SeekFrom::End(-1)).map_or_else(
+        self.file.borrow_mut().seek(SeekFrom::End(-1)).map_or_else(
             |e| Err(format!("Failed to append to file {}", e)),
             |_| Ok(()),
         )?;
         // Read the last character
         let mut b = [0_u8; 1];
-        self.file.read_exact(&mut b)?;
+        self.file.borrow_mut().read_exact(&mut b)?;
         // Verify it is '\n' else append '\n' so in any case the file ends with with a newline now
         if &b != b"\n" {
             //self.file.write_all(&b)?;
-            self.file.write_all(b"\n")?;
+            self.file.borrow_mut().write_all(b"\n")?;
         }
         // write the new line.
-        self.file.write_all(&appendee.into_bytes()).map_or_else(
-            |e| Err(("Failed to append to file".to_owned(), e).into()),
-            Ok,
-        )
+        self.file
+            .borrow_mut()
+            .write_all(&appendee.into_bytes())
+            .map_or_else(
+                |e| Err(("Failed to append to file".to_owned(), e).into()),
+                Ok,
+            )
     }
 }
 
 impl Drop for LockedFileGuard {
     fn drop(&mut self) {
-        info!("removing lock on {:?}", self.path);
+        info!("removing lock {:?}", self.lockfile);
         std::fs::remove_file(&self.lockfile).unwrap();
     }
 }
+
+#[test]
+fn test_replace_a_file() -> Result<(), UserLibError> {
+    use crate::Fixture;
+    let pwds = Fixture::copy("passwds");
+    let shds = Fixture::copy("shadows");
+    let grps = Fixture::copy("groups");
+
+    let fls = Files::new(
+        &pwds.path.to_string_lossy(),
+        &shds.path.to_string_lossy(),
+        &grps.path.to_string_lossy(),
+    )?;
+
+    {
+        let mut lpwd = fls.lock_guarded_passwd()?;
+        lpwd.replace_contents(&"new_content".to_owned())?;
+        // test that the cache is updated
+        assert_eq!(*lpwd.path.old_content.0.borrow(), "new_content".to_owned());
+        let mut desc = lpwd.file.borrow_mut();
+        desc.seek(SeekFrom::Start(0))?;
+        let cont = file_to_string(&*desc);
+        let e = cont?;
+        // test that the file contains the new data
+        assert_eq!(e, "new_content\n");
+    }
+    let second_lpwd = fls.lock_guarded_passwd()?;
+    assert_eq!(
+        *second_lpwd.path.old_content.0.borrow(),
+        "new_content".to_owned()
+    );
+    Ok(())
+}
+
+//#[test]
+//fn test_replace_a_file() -> Result<(), UserLibError> {}
