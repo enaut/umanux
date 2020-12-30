@@ -1,5 +1,6 @@
 #![allow(clippy::non_ascii_literal)]
 
+pub mod backlog;
 pub mod files;
 pub mod hashes;
 
