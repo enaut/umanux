@@ -24,7 +24,7 @@ fn test_add_passwd_line() {
     // test first user adding
     let result_first = apl.execute(content).unwrap();
     // verify the number of lines
-    assert!(result_first.lines().collect::<Vec<_>>().len() == 1);
+    assert!(result_first.lines().count() == 1);
     // verify the line content
     assert_eq!(result_first.trim_end(), &first_user.to_string());
     assert_eq!(
@@ -36,7 +36,7 @@ fn test_add_passwd_line() {
     let apl2 = AddPasswdLine(Rc::clone(&first_user));
     let result_second = apl2.execute(result_first).unwrap();
     // verify the number of lines
-    assert!(result_second.lines().collect::<Vec<_>>().len() == 2);
+    assert!(result_second.lines().count() == 2);
     // verify the line content
     for line in result_second.lines() {
         assert_eq!(line.trim_end(), &first_user.to_string());
@@ -47,7 +47,7 @@ fn test_add_passwd_line() {
     let apl3 = AddPasswdLine(Rc::clone(&second_user));
     let result_third = apl3.execute(result_second).unwrap();
     // verify the number of lines
-    assert!(result_third.lines().collect::<Vec<_>>().len() == 3);
+    assert!(result_third.lines().count() == 3);
     // verify the line content
     assert_eq!(result_third.lines().next().unwrap(), first_user.to_string());
     assert_eq!(
@@ -78,7 +78,7 @@ fn test_add_shadow_line() {
     // test first user adding
     let result_first = apl.execute(content).unwrap();
     // verify the number of lines
-    assert!(result_first.lines().collect::<Vec<_>>().len() == 1);
+    assert!(result_first.lines().count() == 1);
     // verify the line content
     assert_eq!(
         result_first.trim_end(),
@@ -90,7 +90,7 @@ fn test_add_shadow_line() {
     let apl2 = AddShadowLine(Rc::clone(&first_user));
     let result_second = apl2.execute(result_first).unwrap();
     // verify the number of lines
-    assert!(result_second.lines().collect::<Vec<_>>().len() == 2);
+    assert!(result_second.lines().count() == 2);
     // verify the line content
     for line in result_second.lines() {
         assert_eq!(
@@ -104,7 +104,7 @@ fn test_add_shadow_line() {
     let apl3 = AddShadowLine(Rc::clone(&second_user));
     let result_third = apl3.execute(result_second).unwrap();
     // verify the number of lines
-    assert!(result_third.lines().collect::<Vec<_>>().len() == 3);
+    assert!(result_third.lines().count() == 3);
     // verify the line content
     assert_eq!(
         result_third.lines().next().unwrap(),
@@ -136,7 +136,7 @@ fn test_add_group_line() {
     // test first user adding
     let result_first = apl.execute(content).unwrap();
     // verify the number of lines
-    assert!(result_first.lines().collect::<Vec<_>>().len() == 1);
+    assert!(result_first.lines().count() == 1);
     // verify the line content
     assert_eq!(result_first.trim_end(), group.borrow().to_string());
     assert_eq!(result_first.trim_end(), "teste:x:1002:test,teste");
@@ -145,7 +145,7 @@ fn test_add_group_line() {
     let apl2 = AddGroupLine(Rc::clone(&group));
     let result_second = apl2.execute(result_first).unwrap();
     // verify the number of lines
-    assert!(result_second.lines().collect::<Vec<_>>().len() == 2);
+    assert!(result_second.lines().count() == 2);
     // verify the line content
     for line in result_second.lines() {
         assert_eq!(line.trim_end(), group.borrow().to_string());
@@ -156,7 +156,7 @@ fn test_add_group_line() {
     let apl3 = AddGroupLine(Rc::clone(&second_user));
     let result_third = apl3.execute(result_second).unwrap();
     // verify the number of lines
-    assert!(result_third.lines().collect::<Vec<_>>().len() == 3);
+    assert!(result_third.lines().count() == 3);
     // verify the line content
     assert_eq!(
         result_third.lines().next().unwrap(),
@@ -199,7 +199,7 @@ fn test_delete_passwd_line() {
     let delete_password_line = DeletePasswdLine(Rc::clone(&first_user));
     let result_first = delete_password_line.execute(result_first).unwrap();
     // verify the number of lines
-    assert!(result_first.lines().collect::<Vec<_>>().len() == 0);
+    assert!(result_first.lines().count() == 0);
     // verify the line content
     assert_eq!(result_first, "");
 
@@ -212,7 +212,7 @@ defaultusername:x:1001:1001::/:/bin/nologin"
     let delete_password_line = DeletePasswdLine(Rc::clone(&second_user));
     let result_second = delete_password_line.execute(content).unwrap();
     // verify the number of lines
-    assert_eq!(result_second.lines().collect::<Vec<_>>().len(), 3);
+    assert_eq!(result_second.lines().count(), 3);
     // verify the line content
     for line in result_second.lines() {
         assert_eq!(line.trim_end(), &first_user.to_string());
@@ -260,7 +260,7 @@ fn test_delete_shadow_line() {
     let delete_shadow_line = DeleteShadowLine(Rc::clone(&first_user));
     let result_first = delete_shadow_line.execute(result_first).unwrap();
     // verify the number of lines
-    assert!(result_first.lines().collect::<Vec<_>>().len() == 0);
+    assert!(result_first.lines().count() == 0);
     // verify the line content
     assert_eq!(result_first, "");
 
@@ -273,7 +273,7 @@ defaultusername:!!:0:0:99999:7:::"
     let delete_password_line = DeleteShadowLine(Rc::clone(&second_user));
     let result_second = delete_password_line.execute(content).unwrap();
     // verify the number of lines
-    assert_eq!(result_second.lines().collect::<Vec<_>>().len(), 3);
+    assert_eq!(result_second.lines().count(), 3);
     // verify the line content
     for line in result_second.lines() {
         assert_eq!(
@@ -332,7 +332,7 @@ fn test_delete_group_line() {
     let result_first = add_group_line.execute(content).unwrap();
     let result_first = delete_group_line.execute(result_first).unwrap();
     // verify the number of lines
-    assert!(result_first.lines().collect::<Vec<_>>().len() == 0);
+    assert!(result_first.lines().count() == 0);
     // verify the line content
     assert_eq!(result_first, "");
 
@@ -345,7 +345,7 @@ anders:x:1002:test,teste"
     let delete_password_line = DeleteGroupLine(Rc::clone(&group));
     let result_second = delete_password_line.execute(content).unwrap();
     // verify the number of lines
-    assert_eq!(result_second.lines().collect::<Vec<_>>().len(), 3);
+    assert_eq!(result_second.lines().count(), 3);
     // verify the line content
     for line in result_second.lines() {
         assert_eq!(line.trim_end(), "anders:x:1002:test,teste");
