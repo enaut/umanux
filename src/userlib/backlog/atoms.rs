@@ -2,9 +2,8 @@ use std::rc::Rc;
 
 use crate::{Group, User, UserLibError};
 
-pub trait ExecutableUnit {
-    fn execute(self, content: String) -> Result<String, UserLibError>;
-}
+use super::ExecutableUnit;
+
 struct AddPasswdLine(Rc<User>);
 impl ExecutableUnit for AddPasswdLine {
     fn execute(self, mut content: String) -> Result<String, UserLibError> {
