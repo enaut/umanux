@@ -9,7 +9,7 @@ use crate::{Group, User, UserLibError};
 
 use super::ExecutableAtom;
 
-pub struct AddPasswdLine(Rc<User>);
+pub struct AddPasswdLine(pub Rc<User>);
 impl ExecutableAtom for AddPasswdLine {
     fn execute(self, mut content: String) -> Result<String, UserLibError> {
         let selfline = self.0.to_string();
@@ -60,7 +60,7 @@ fn test_add_passwd_line() {
     );
 }
 
-pub struct AddShadowLine(Rc<User>);
+pub struct AddShadowLine(pub Rc<User>);
 impl ExecutableAtom for AddShadowLine {
     fn execute(self, mut content: String) -> Result<String, UserLibError> {
         let selfline = self
@@ -120,7 +120,7 @@ fn test_add_shadow_line() {
     );
 }
 
-pub struct AddGroupLine(Group);
+pub struct AddGroupLine(pub Group);
 impl ExecutableAtom for AddGroupLine {
     fn execute(self, mut content: String) -> Result<String, UserLibError> {
         let selfline = self.0.borrow().to_string();

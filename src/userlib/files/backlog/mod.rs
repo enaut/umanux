@@ -7,7 +7,7 @@ pub trait ExecutableAtom {
 }
 
 pub trait ExecutableUnit {
-    fn execute(self, files: FileContents) -> Result<(), UserLibError>;
+    fn execute(self, files: FileContents) -> Result<FileContents, UserLibError>;
 }
 
 pub mod actions;
