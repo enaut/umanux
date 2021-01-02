@@ -1,3 +1,7 @@
+//! Utilities for tracking and locking `/etc/{passwd,shadow,group}` files.
+
+pub mod backlog;
+
 use std::{
     cell::RefCell,
     fs::{File, OpenOptions},
@@ -22,7 +26,7 @@ struct ChangeTrackingPath {
 }
 
 #[derive(Debug, Clone)]
-pub struct OldContent(RefCell<String>);
+struct OldContent(RefCell<String>);
 
 impl OldContent {
     #[must_use]
@@ -400,6 +404,12 @@ impl Drop for LockedFileGuard {
         info!("removing lock {:?}", self.lockfile);
         std::fs::remove_file(&self.lockfile).unwrap();
     }
+}
+
+pub struct FileContents {
+    pwd: Rc<RefCell<String>>,
+    shd: Rc<RefCell<String>>,
+    grp: Rc<RefCell<String>>,
 }
 
 #[test]

@@ -1,6 +1,5 @@
 #![allow(clippy::non_ascii_literal)]
 
-pub mod backlog;
 pub mod files;
 pub mod hashes;
 
@@ -47,7 +46,7 @@ impl UserDBLocal {
         }
     }
 
-    /// Import the database from a [`umanux::userlib::files::Files`] struct
+    /// Import the database from a [`crate::userlib::files::Files`] struct
     pub fn load_files(files: files::Files) -> Result<Self, crate::UserLibError> {
         // Get the Strings for the files use an inner block to drop references after read.
         let (my_passwd_lines, my_shadow_lines, my_group_lines) = {
@@ -474,7 +473,7 @@ fn user_vec_to_hashmap(users: Vec<crate::User>) -> UserList {
 /// Try to parse a String into some Object.
 ///
 /// # Errors
-/// if the parsing failed a [`UserLibError::Message`](crate::userlib_error::UserLibError::Message) is returned containing a more detailed error message.
+/// if the parsing failed a [`UserLibError::Message`](crate::error::UserLibError::Message) is returned containing a more detailed error message.
 pub trait NewFromString {
     fn new_from_string(line: String, position: u32) -> Result<Self, crate::UserLibError>
     where

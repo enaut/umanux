@@ -96,7 +96,7 @@ impl NewFromString for User {
     /// ```
     ///
     /// # Errors
-    /// When parsing fails this function returns a [`UserLibError::Message`](crate::userlib_error::UserLibError::Message) containing some information as to why the function failed.
+    /// When parsing fails this function returns a [`UserLibError::Message`](crate::error::UserLibError::Message) containing some information as to why the function failed.
     fn new_from_string(line: String, position: u32) -> Result<Self, crate::UserLibError>
     where
         Self: Sized,
