@@ -1,4 +1,4 @@
-use crate::UserLibError;
+use crate::{UserDBLocal, UserLibError};
 
 use super::FileContents;
 
@@ -7,7 +7,11 @@ pub trait ExecutableAtom {
 }
 
 pub trait ExecutableUnit {
-    fn execute(self, files: FileContents) -> Result<FileContents, UserLibError>;
+    fn execute(self, contents: FileContents) -> Result<FileContents, UserLibError>;
+}
+
+pub trait ValidatableUnit {
+    fn validate(self, contents: FileContents, db: &UserDBLocal) -> Result<(), UserLibError>;
 }
 
 pub mod actions;

@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::{userlib::files::FileContents, Group, User};
 
 use super::{
-    atoms::{AddGroupLine, AddPasswdLine, AddShadowLine},
+    atoms::{AddGroupLine, AddPasswdLine, AddShadowLine, DeleteGroupLine},
     ExecutableAtom, ExecutableUnit,
 };
 
@@ -25,11 +25,33 @@ impl ExecutableUnit for AddUserAction {
 }
 
 impl AddUserAction {
-    pub fn new(user: Rc<User>, group: Group) -> Self {
+    pub fn new(user: &Rc<User>, group: &Group) -> Self {
         Self {
-            pwd: AddPasswdLine(Rc::clone(&user)),
-            shd: AddShadowLine(Rc::clone(&user)),
-            grp: AddGroupLine(Rc::clone(&group)),
+            pwd: AddPasswdLine(Rc::clone(user)),
+            shd: AddShadowLine(Rc::clone(user)),
+            grp: AddGroupLine(Rc::clone(group)),
         }
+    }
+}
+
+pub struct AddGroupAction {
+    grp: AddGroupLine,
+}
+
+impl ExecutableUnit for AddGroupAction {
+    fn execute(self, contents: FileContents) -> Result<FileContents, crate::UserLibError> {
+        contents.grp.replace(self.grp.execute(contents.grp.take())?);
+        Ok(contents)
+    }
+}
+
+pub struct DeleteGroupAction {
+    grp: DeleteGroupLine,
+}
+
+impl ExecutableUnit for DeleteGroupAction {
+    fn execute(self, contents: FileContents) -> Result<FileContents, crate::UserLibError> {
+        contents.grp.replace(self.grp.execute(contents.grp.take())?);
+        Ok(contents)
     }
 }
