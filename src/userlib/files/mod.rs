@@ -1,6 +1,6 @@
 //! Utilities for tracking and locking `/etc/{passwd,shadow,group}` files.
 
-pub mod backlog;
+pub mod oplog;
 
 use std::{
     cell::RefCell,
