@@ -1,4 +1,6 @@
-use umanux::Fixture;
+#[path = "../src/tests/mod.rs"]
+mod tests;
+use tests::testfiles::Fixture;
 
 extern crate umanux;
 

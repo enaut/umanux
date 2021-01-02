@@ -19,7 +19,6 @@ extern crate log;
 pub mod api;
 pub mod error;
 pub mod group;
-pub mod tests;
 pub mod user;
 pub mod userlib;
 pub use error::UserLibError;
@@ -32,4 +31,7 @@ pub use user::shadow_fields::Shadow;
 pub use user::User;
 pub use userlib::{files::Files, NewFromString, UserDBLocal};
 
+#[cfg(test)]
+pub mod tests;
+#[cfg(test)]
 pub use tests::testfiles::Fixture;

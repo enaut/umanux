@@ -1,6 +1,7 @@
+#![allow(dead_code)] // Allow dead code as some functions are called by the integration tests but not otherwise so they would trigger warnings.
+
 use std::{env, path::Path};
 use std::{fs, path::PathBuf};
-
 use tempfile::TempDir;
 
 use std::ops::Deref;
