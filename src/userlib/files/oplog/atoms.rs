@@ -1,7 +1,7 @@
 //! A collection of small operations on the `/etc/{passwd,shadow,group}` files.
 //!
 //! No special checks are made. Usually one single such action does not make sense and should only be used in combination with others.
-//! All operations implement [`super::ExecutableUnit`]
+//! All operations implement [`super::ExecutableUnit`]. The structs in this module are only visible to [oplog](`super`).
 
 use std::rc::Rc;
 
@@ -9,7 +9,7 @@ use crate::{Group, User, UserLibError};
 
 use super::ExecutableAtom;
 
-pub struct AddPasswdLine(pub Rc<User>);
+pub(super) struct AddPasswdLine(pub Rc<User>);
 impl ExecutableAtom for AddPasswdLine {
     fn execute(self, mut content: String) -> Result<String, UserLibError> {
         let selfline = self.0.to_string();
@@ -60,7 +60,7 @@ fn test_add_passwd_line() {
     );
 }
 
-pub struct AddShadowLine(pub Rc<User>);
+pub(super) struct AddShadowLine(pub Rc<User>);
 impl ExecutableAtom for AddShadowLine {
     fn execute(self, mut content: String) -> Result<String, UserLibError> {
         let selfline = self
@@ -120,7 +120,7 @@ fn test_add_shadow_line() {
     );
 }
 
-pub struct AddGroupLine(pub Group);
+pub(super) struct AddGroupLine(pub Group);
 impl ExecutableAtom for AddGroupLine {
     fn execute(self, mut content: String) -> Result<String, UserLibError> {
         let selfline = self.0.borrow().to_string();
@@ -172,7 +172,7 @@ fn test_add_group_line() {
     );
 }
 
-pub struct DeletePasswdLine(Rc<User>);
+pub(super) struct DeletePasswdLine(Rc<User>);
 impl ExecutableAtom for DeletePasswdLine {
     fn execute(self, content: String) -> Result<String, UserLibError> {
         let selfline = self.0.to_string();
@@ -226,7 +226,7 @@ defaultusername:x:1001:1001::/:/bin/nologin"
     assert_eq!(result_third, Err("Failed to delete the user".into()))
 }
 
-pub struct DeleteShadowLine(Rc<User>);
+pub(super) struct DeleteShadowLine(Rc<User>);
 impl ExecutableAtom for DeleteShadowLine {
     fn execute(self, content: String) -> Result<String, UserLibError> {
         let selfline = self
@@ -293,16 +293,7 @@ defaultusername:!!:0:0:99999:7:::"
     )
 }
 
-/*
-struct DeleteGroupLine();
-impl ExecutableUnit for DeleteGroupLine {
-    fn execute(&self, user: Option<User>, content: &mut String) -> &mut String {
-        todo!()
-    }
-}
-*/
-
-pub struct DeleteGroupLine(Group);
+pub(super) struct DeleteGroupLine(Group);
 impl ExecutableAtom for DeleteGroupLine {
     fn execute(self, content: String) -> Result<String, UserLibError> {
         let selfline = self.0.borrow().to_string();
