@@ -26,6 +26,9 @@ impl Shadow {
     pub fn get_username(&self) -> &str {
         &self.username.username
     }
+    pub fn get_last_change(&self) -> Option<&chrono::NaiveDateTime> {
+        self.last_change.as_ref()
+    }
 
     pub fn set_username(&mut self, username: crate::Username) {
         self.username = username;

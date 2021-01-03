@@ -4,14 +4,32 @@ use crate::userlib::NewFromString;
 use log::warn;
 
 use crate::UserLibError;
-use std::fmt::{self, Debug, Display};
 use std::{cell::RefCell, convert::TryFrom};
 use std::{cmp::Eq, rc::Rc};
+use std::{
+    cmp::Ordering,
+    fmt::{self, Debug, Display},
+};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd)]
 pub enum MembershipKind {
     Primary,
     Member,
+}
+
+impl Ord for MembershipKind {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self {
+            Self::Primary => match other {
+                Self::Primary => Ordering::Equal,
+                Self::Member => Ordering::Less,
+            },
+            Self::Member => match other {
+                Self::Primary => Ordering::Greater,
+                Self::Member => Ordering::Equal,
+            },
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
