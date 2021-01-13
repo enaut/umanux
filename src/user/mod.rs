@@ -3,17 +3,39 @@ pub mod gecos_fields;
 pub mod passwd_fields;
 pub mod shadow_fields;
 
-use crate::userlib::NewFromString;
+use crate::UserLibError;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use std::convert::TryFrom;
-use std::fmt::{self, Display};
+use std::{
+    cmp::Ordering,
+    fmt::{self, Display},
+};
+use std::{convert::TryFrom, str::FromStr};
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Position {
+    At(u32),
+    NotInFile,
+    NewToFile,
+    NotAssignedYet,
+}
+
+impl PartialOrd for Position {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        use Position::*;
+        match (self, other) {
+            (At(n), At(o)) => Some(n.cmp(&o)),
+            (NewToFile, _) => Some(Ordering::Greater),
+            (NotInFile, _) | (_, NotInFile) | (NotAssignedYet, _) | (_, NotAssignedYet) => None,
+        }
+    }
+}
 
 /// A record(line) in the user database `/etc/passwd` found in most linux systems.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct User {
     source: String,
-    pos: u32,
+    pos: Position,
     username: crate::Username,            /* Username.  */
     pub(crate) password: crate::Password, /* Hashed passphrase, if shadow database not in use (see shadow.h).  */
     uid: crate::Uid,                      /* User ID.  */
@@ -83,29 +105,30 @@ impl User {
     }
 }
 
-impl NewFromString for User {
+impl FromStr for User {
+    type Err = UserLibError;
     /// Parse a line formatted like one in `/etc/passwd` and construct a matching [`User`] instance
     ///
     /// # Example
     /// ```
     /// use crate::umanux::api::UserRead;
     /// use umanux::NewFromString;
-    /// let pwd = umanux::User::new_from_string(
-    ///     "testuser:testpassword:1001:1001:full Name,,,,:/home/test:/bin/test".to_string(), 0).unwrap();
+    /// let pwd:umanux::User =
+    ///     "testuser:testpassword:1001:1001:full Name,,,,:/home/test:/bin/test".parse().unwrap();
     /// assert_eq!(pwd.get_username().unwrap(), "testuser");
     /// ```
     ///
     /// # Errors
     /// When parsing fails this function returns a [`UserLibError::Message`](crate::error::UserLibError::Message) containing some information as to why the function failed.
-    fn new_from_string(line: String, position: u32) -> Result<Self, crate::UserLibError>
+    fn from_str(line: &str) -> Result<Self, Self::Err>
     where
         Self: Sized,
     {
         let elements: Vec<String> = line.split(':').map(ToString::to_string).collect();
         if elements.len() == 7 {
             Ok(Self {
-                source: line,
-                pos: position,
+                source: line.to_owned(),
+                pos: Position::NotAssignedYet,
                 username: crate::Username::try_from(elements.get(0).unwrap().to_string())?,
                 password: crate::Password::Encrypted(crate::EncryptedPassword::try_from(
                     elements.get(1).unwrap().to_string(),
@@ -185,13 +208,7 @@ impl crate::api::UserRead for User {
 
 impl PartialOrd for User {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.pos.cmp(&other.pos))
-    }
-}
-
-impl Ord for User {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.pos.cmp(&other.pos)
+        self.partial_cmp(other)
     }
 }
 
@@ -206,7 +223,7 @@ impl Default for User {
         );
         Self {
             source: "".to_owned(),
-            pos: u32::MAX,
+            pos: Position::NewToFile,
             username,
             password,
             uid: crate::Uid { uid: 1001 },
@@ -255,15 +272,12 @@ fn test_default_user() {
 #[test]
 fn test_new_from_string() {
     // Test if a single line can be parsed and if the resulting struct is populated correctly.
-    let fail = User::new_from_string("".into(), 0).err().unwrap();
+    let fail = "".parse::<User>().err().unwrap();
     assert_eq!(fail, "Failed to parse: not enough elements".into());
-    let pwd = User::new_from_string(
-        "testuser:testpassword:1001:1001:testcomment:/home/test:/bin/test".into(),
-        0,
-    )
-    .unwrap();
-    let pwd2 =
-        User::new_from_string("testuser:testpassword:1001:1001:full Name,004,000342,001-2312,myemail@test.com:/home/test:/bin/test".into(),0)
+    let pwd: User = "testuser:testpassword:1001:1001:testcomment:/home/test:/bin/test"
+        .parse()
+        .unwrap();
+    let pwd2:User ="testuser:testpassword:1001:1001:full Name,004,000342,001-2312,myemail@test.com:/home/test:/bin/test".parse()
             .unwrap();
     assert_eq!(pwd.username.username, "testuser");
     assert_eq!(pwd.home_dir.dir, "/home/test");
@@ -293,7 +307,6 @@ fn test_new_from_string() {
 #[test]
 fn test_parse_passwd() {
     // Test wether the passwd file can be parsed and recreated without throwing an exception
-    use std::convert::TryInto;
     use std::fs::File;
     use std::io::{prelude::*, BufReader};
     let file = File::open("/etc/passwd").unwrap();
@@ -301,8 +314,7 @@ fn test_parse_passwd() {
 
     for (n, line) in reader.lines().enumerate() {
         let lineorig: String = line.unwrap();
-        let linecopy = lineorig.clone();
-        let pass_struc = User::new_from_string(linecopy, n.try_into().unwrap()).unwrap();
+        let pass_struc: User = lineorig.parse().unwrap();
         assert_eq!(
             // ignoring the numbers of `,` since the implementation does not (yet) reproduce a missing comment field.
             lineorig,

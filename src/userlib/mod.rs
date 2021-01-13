@@ -16,6 +16,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufReader, Read},
+    str::FromStr,
 };
 
 pub type UserList = HashMap<String, crate::User>;
@@ -474,35 +475,20 @@ fn user_vec_to_hashmap(users: Vec<crate::User>) -> UserList {
 ///
 /// # Errors
 /// if the parsing failed a [`UserLibError::Message`](crate::error::UserLibError::Message) is returned containing a more detailed error message.
-pub trait NewFromString {
-    fn new_from_string(line: String, position: u32) -> Result<Self, crate::UserLibError>
-    where
-        Self: Sized;
+pub trait LineNumerable {
+    fn set_line(&mut self, position: u32) -> &mut Self;
 }
 
 /// A generic function that parses a string line by line and creates the appropriate `Vec<T>` requested by the type system.
 fn string_to<T>(source: &str) -> Vec<T>
 where
-    T: NewFromString,
+    T: FromStr + LineNumerable,
 {
-    use std::convert::TryInto;
     source
+        .to_owned()
         .lines()
         .enumerate()
-        .filter_map(|(n, line)| {
-            if line.len() > 5 {
-                Some(
-                    T::new_from_string(
-                        line.to_owned(),
-                        n.try_into()
-                            .unwrap_or_else(|e| panic!("Failed to convert usize to u32 {}", e)),
-                    )
-                    .expect("failed to read lines"),
-                )
-            } else {
-                None
-            }
-        })
+        .filter_map(|(n, line)| line.parse().map(|x| x.set_line(n.into())))
         .collect()
 }
 

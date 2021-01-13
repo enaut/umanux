@@ -1,10 +1,9 @@
 #![allow(clippy::non_ascii_literal)]
 
-use crate::userlib::NewFromString;
 use log::warn;
 
 use crate::UserLibError;
-use std::{cell::RefCell, convert::TryFrom};
+use std::{cell::RefCell, convert::TryFrom, str::FromStr};
 use std::{cmp::Eq, rc::Rc};
 use std::{
     cmp::Ordering,
@@ -72,7 +71,6 @@ pub type Group = Rc<RefCell<Inner>>;
 /// A record(line) in the user database `/etc/shadow` found in most linux systems.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Inner {
-    pos: u32,
     source: String,
     groupname: Groupname,                 /* Username.  */
     pub(crate) password: crate::Password, /* Usually not used (disabled with x) */
@@ -150,7 +148,7 @@ impl Display for Inner {
     }
 }
 
-impl NewFromString for Group {
+impl FromStr for Group {
     /// Parse a line formatted like one in `/etc/group` and construct a matching [`Group`] instance
     ///
     /// # Example
@@ -166,11 +164,11 @@ impl NewFromString for Group {
     ///
     /// # Errors
     /// When parsing fails this function returns a `UserLibError::Message` containing some information as to why the function failed.
-    fn new_from_string(line: String, position: u32) -> Result<Self, UserLibError> {
+    type Err = UserLibError;
+    fn from_str(line: &str) -> Result<Self, Self::Err> {
         let elements: Vec<String> = line.split(':').map(ToString::to_string).collect();
         if elements.len() == 4 {
             Ok(Self::new(RefCell::new(Inner {
-                pos: position,
                 source: line,
                 groupname: Groupname::try_from(elements.get(0).unwrap().to_string())?,
                 password: crate::Password::Disabled,

@@ -1,9 +1,7 @@
-use crate::userlib::NewFromString;
-
 use crate::UserLibError;
-use std::cmp::Eq;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display};
+use std::{cmp::Eq, str::FromStr};
 
 /// A record(line) in the user database `/etc/shadow` found in most linux systems.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -86,7 +84,7 @@ fn show_option_duration(input: Option<chrono::Duration>) -> String {
     }
 }
 
-impl NewFromString for Shadow {
+impl FromStr for Shadow {
     /// Parse a line formatted like one in `/etc/shadow` and construct a matching `Shadow` instance
     ///
     /// # Example
