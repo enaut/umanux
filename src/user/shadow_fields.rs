@@ -6,7 +6,6 @@ use std::{cmp::Eq, str::FromStr};
 /// A record(line) in the user database `/etc/shadow` found in most linux systems.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Shadow {
-    pos: u32,
     source: String,
     username: crate::Username,                      /* Username.  */
     pub(crate) password: crate::EncryptedPassword,  /* Hashed passphrase */
@@ -99,13 +98,12 @@ impl FromStr for Shadow {
     ///
     /// # Errors
     /// When parsing fails this function returns a `UserLibError::Message` containing some information as to why the function failed.
-    fn new_from_string(line: String, position: u32) -> Result<Self, UserLibError> {
+    fn from_str(line: &str) -> Result<Self, Self::Err> {
         let elements: Vec<String> = line.split(':').map(ToString::to_string).collect();
         if elements.len() == 9 {
             let extra = elements.get(8).unwrap();
             Ok(Self {
-                pos: position,
-                source: line,
+                source: line.to_owned(),
                 username: crate::Username::try_from(elements.get(0).unwrap().to_string())?,
                 password: crate::EncryptedPassword::try_from(elements.get(1).unwrap().to_string())?,
                 last_change: date_since_epoch(elements.get(2).unwrap()),
@@ -129,6 +127,8 @@ impl FromStr for Shadow {
             .into())
         }
     }
+
+    type Err = UserLibError;
 }
 
 const SECONDS_PER_DAY: i64 = 86400;
@@ -154,6 +154,6 @@ fn duration_for_days(days_source: &str) -> Option<chrono::Duration> {
 #[test]
 fn test_parse_and_back_identity() {
     let line = "test:$6$u0Hh.9WKRF1Aeu4g$XqoDyL6Re/4ZLNQCGAXlNacxCxbdigexEqzFzkOVPV5Z1H23hlenjW8ZLgq6GQtFURYwenIFpo1c.r4aW9l5S/:18260:0:99999:7:::";
-    let line2 = Shadow::new_from_string(line.to_owned(), 0).unwrap();
+    let line2: Shadow = line.parse().unwrap();
     assert_eq!(format!("{}", line2), line);
 }

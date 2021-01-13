@@ -8,14 +8,16 @@ use crate::{
         CreateUserArgs, DeleteHome, DeleteUserArgs, GroupRead, UserDBRead, UserDBWrite, UserRead,
     },
     group::MembershipKind,
-    UserLibError,
+    Group, UserLibError,
 };
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fs::File,
     io::{BufReader, Read},
+    rc::Rc,
     str::FromStr,
 };
 
@@ -24,7 +26,7 @@ pub type UserList = HashMap<String, crate::User>;
 pub struct UserDBLocal {
     source_files: Option<files::Files>,
     pub users: UserList,
-    pub groups: Vec<crate::Group>,
+    pub groups: Vec<Rc<RefCell<crate::Group>>>,
 }
 
 impl UserDBLocal {
@@ -34,17 +36,20 @@ impl UserDBLocal {
         passwd_content: &str,
         shadow_content: &str,
         group_content: &str,
-    ) -> Self {
-        let shadow_entries: Vec<crate::Shadow> = string_to(shadow_content);
-        let mut users = user_vec_to_hashmap(string_to(passwd_content));
-        let mut groups = string_to(group_content);
+    ) -> Result<Self, UserLibError> {
+        let shadow_entries: Vec<crate::Shadow> = string_to(shadow_content)?;
+        let mut users = user_vec_to_hashmap(string_to(passwd_content)?);
+        let mut groups: Vec<Rc<RefCell<Group>>> = string_to::<Group>(group_content)?
+            .into_iter()
+            .map(|x| Rc::new(RefCell::new(x)))
+            .collect();
         shadow_to_users(&mut users, shadow_entries);
-        groups_to_users(&mut users, &mut groups);
-        Self {
+        groups_to_users(&mut users, &groups);
+        Ok(Self {
             source_files: None,
             users,
             groups,
-        }
+        })
     }
 
     /// Import the database from a [`crate::userlib::files::Files`] struct
@@ -61,11 +66,14 @@ impl UserDBLocal {
             (p, s, g)
         };
 
-        let mut users = user_vec_to_hashmap(string_to(&my_passwd_lines));
-        let passwds: Vec<crate::Shadow> = string_to(&my_shadow_lines);
-        let mut groups: Vec<crate::Group> = string_to(&my_group_lines);
+        let mut users = user_vec_to_hashmap(string_to(&my_passwd_lines)?);
+        let passwds: Vec<crate::Shadow> = string_to(&my_shadow_lines)?;
+        let mut groups: Vec<Rc<RefCell<crate::Group>>> = string_to::<Group>(&my_group_lines)?
+            .into_iter()
+            .map(|x| Rc::new(RefCell::new(x)))
+            .collect();
         shadow_to_users(&mut users, passwds);
-        groups_to_users(&mut users, &mut groups);
+        groups_to_users(&mut users, &groups);
         Ok(Self {
             source_files: Some(files),
             users,
@@ -112,7 +120,7 @@ impl UserDBLocal {
     }
 
     fn delete_from_group(
-        group: &crate::Group,
+        group: Rc<RefCell<crate::Group>>,
         locked_g: &mut files::LockedFileGuard,
     ) -> Result<(), UserLibError> {
         let group_file_content = file_to_string(&locked_g.file.borrow_mut())?;
@@ -306,11 +314,11 @@ impl UserDBWrite for UserDBLocal {
         }
     }
 
-    fn delete_group(&mut self, _group: &crate::Group) -> Result<(), crate::UserLibError> {
+    fn delete_group(&mut self, group: Rc<RefCell<Group>>) -> Result<(), UserLibError> {
         todo!()
     }
 
-    fn new_group(&mut self) -> Result<&crate::Group, crate::UserLibError> {
+    fn new_group(&mut self) -> Result<Rc<RefCell<Group>>, UserLibError> {
         todo!()
     }
 }
@@ -336,23 +344,23 @@ impl UserDBRead for UserDBLocal {
         None
     }
 
-    fn get_all_groups(&self) -> Vec<crate::Group> {
+    fn get_all_groups(&self) -> Vec<Rc<RefCell<crate::Group>>> {
         self.groups.iter().map(std::clone::Clone::clone).collect()
     }
 
-    fn get_group_by_name(&self, name: &str) -> Option<&crate::Group> {
+    fn get_group_by_name(&self, name: &str) -> Option<Rc<RefCell<crate::Group>>> {
         for group in &self.groups {
             if group.borrow().get_groupname()? == name {
-                return Some(group);
+                return Some(Rc::clone(group));
             }
         }
         None
     }
 
-    fn get_group_by_id(&self, id: u32) -> Option<&crate::Group> {
+    fn get_group_by_id(&self, id: u32) -> Option<Rc<RefCell<crate::Group>>> {
         for group in &self.groups {
             if group.borrow().get_gid()? == id {
-                return Some(group);
+                return Some(Rc::clone(group));
             }
         }
         None
@@ -403,7 +411,7 @@ fn file_to_string(file: &File) -> Result<String, crate::UserLibError> {
 
 fn groups_to_users<'a>(
     users: &'a mut UserList,
-    groups: &'a mut [crate::Group],
+    groups: &Vec<Rc<RefCell<crate::Group>>>,
 ) -> &'a mut UserList {
     // Populate the regular groups
 
@@ -423,12 +431,18 @@ fn groups_to_users<'a>(
     // Populate the primary membership
     for user in users.values_mut() {
         let gid = user.get_gid();
-        let grouplist: Vec<&crate::Group> = groups
+        let grouplist: Vec<Rc<RefCell<crate::Group>>> = groups
             .iter()
-            .filter(|g| g.borrow().get_gid().unwrap() == gid)
+            .filter_map(|g| {
+                if g.borrow().get_gid().unwrap() == gid {
+                    Some(Rc::clone(g))
+                } else {
+                    None
+                }
+            })
             .collect();
         if grouplist.len() == 1 {
-            let group = *grouplist.first().unwrap();
+            let group = grouplist.first().unwrap();
             group.borrow_mut().append_user(
                 user.get_username()
                     .expect("Users without username are not supported"),
@@ -480,21 +494,20 @@ pub trait LineNumerable {
 }
 
 /// A generic function that parses a string line by line and creates the appropriate `Vec<T>` requested by the type system.
-fn string_to<T>(source: &str) -> Vec<T>
+fn string_to<T>(source: &str) -> Result<Vec<T>, T::Err>
 where
-    T: FromStr + LineNumerable,
+    T: FromStr,
 {
     source
         .to_owned()
         .lines()
-        .enumerate()
-        .filter_map(|(n, line)| line.parse().map(|x| x.set_line(n.into())))
+        .map(|line| line.parse::<T>())
         .collect()
 }
 
 #[test]
 fn test_creator_user_db_local() {
-    let data = UserDBLocal::import_from_strings("test:x:1002:1002:full Name,004,000342,001-2312,myemail@test.com:/home/test:/bin/test", "test:$6$u0Hh.9WKRF1Aeu4g$XqoDyL6Re/4ZLNQCGAXlNacxCxbdigexEqzFzkOVPV5Z1H23hlenjW8ZLgq6GQtFURYwenIFpo1c.r4aW9l5S/:18260:0:99999:7:::", "teste:x:1002:\nanother:x:1003:test");
+    let data = UserDBLocal::import_from_strings("test:x:1002:1002:full Name,004,000342,001-2312,myemail@test.com:/home/test:/bin/test", "test:$6$u0Hh.9WKRF1Aeu4g$XqoDyL6Re/4ZLNQCGAXlNacxCxbdigexEqzFzkOVPV5Z1H23hlenjW8ZLgq6GQtFURYwenIFpo1c.r4aW9l5S/:18260:0:99999:7:::", "teste:x:1002:\nanother:x:1003:test").unwrap();
     assert_eq!(
         data.users.get("test").unwrap().get_username().unwrap(),
         "test"
@@ -519,7 +532,7 @@ fn test_parsing_local_database() {
     let grpfile = File::open(PathBuf::from("/etc/group")).unwrap();
     let my_passwd_lines = file_to_string(&pwdfile).unwrap();
     let my_group_lines = file_to_string(&grpfile).unwrap();
-    let data = UserDBLocal::import_from_strings(&my_passwd_lines, "", &my_group_lines);
+    let data = UserDBLocal::import_from_strings(&my_passwd_lines, "", &my_group_lines).unwrap();
     assert_eq!(
         data.groups
             .get(0)
@@ -538,7 +551,7 @@ fn test_user_db_read_implementation() {
     let grpfile = File::open(PathBuf::from("/etc/group")).unwrap();
     let pass = file_to_string(&pwdfile).unwrap();
     let group = file_to_string(&grpfile).unwrap();
-    let data = UserDBLocal::import_from_strings(&pass, "", &group);
+    let data = UserDBLocal::import_from_strings(&pass, "", &group).unwrap();
     // Usually there are more than 10 users
     assert!(data.get_all_users().len() > 10);
     assert!(data.get_user_by_name("root").is_some());
@@ -572,7 +585,7 @@ fn test_user_db_read_implementation() {
 #[test]
 fn test_user_db_write_implementation() {
     use crate::api::DeleteUserArgs;
-    let mut data = UserDBLocal::import_from_strings("test:x:1001:1001:full Name,004,000342,001-2312,myemail@test.com:/home/test:/bin/test", "test:$6$u0Hh.9WKRF1Aeu4g$XqoDyL6Re/4ZLNQCGAXlNacxCxbdigexEqzFzkOVPV5Z1H23hlenjW8ZLgq6GQtFURYwenIFpo1c.r4aW9l5S/:18260:0:99999:7:::", "teste:x:1002:test,test");
+    let mut data = UserDBLocal::import_from_strings("test:x:1001:1001:full Name,004,000342,001-2312,myemail@test.com:/home/test:/bin/test", "test:$6$u0Hh.9WKRF1Aeu4g$XqoDyL6Re/4ZLNQCGAXlNacxCxbdigexEqzFzkOVPV5Z1H23hlenjW8ZLgq6GQtFURYwenIFpo1c.r4aW9l5S/:18260:0:99999:7:::", "teste:x:1002:test,test").unwrap();
     let user = "test";
 
     assert_eq!(data.get_all_users().len(), 1);

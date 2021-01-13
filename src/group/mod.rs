@@ -37,7 +37,7 @@ pub struct Membership {
     username: crate::Username,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Groupname {
     groupname: String,
 }
@@ -67,10 +67,9 @@ pub(crate) fn is_groupname_valid(name: &str) -> bool {
     crate::user::passwd_fields::is_username_valid(name)
 }
 
-pub type Group = Rc<RefCell<Inner>>;
 /// A record(line) in the user database `/etc/shadow` found in most linux systems.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Inner {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Group {
     source: String,
     groupname: Groupname,                 /* Username.  */
     pub(crate) password: crate::Password, /* Usually not used (disabled with x) */
@@ -78,7 +77,7 @@ pub struct Inner {
     members: Vec<Membership>,             /* Real name.  */
 }
 
-impl Inner {
+impl Group {
     #[must_use]
     pub fn remove_in(&self, content: &str) -> String {
         content
@@ -104,7 +103,7 @@ impl Inner {
 }
 
 use crate::api::GroupRead;
-impl GroupRead for Inner {
+impl GroupRead for Group {
     #[must_use]
     fn get_groupname(&self) -> Option<&str> {
         Some(&self.groupname.groupname)
@@ -127,7 +126,7 @@ impl GroupRead for Inner {
     }
 }
 
-impl Display for Inner {
+impl Display for Group {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(
             f,
@@ -168,13 +167,13 @@ impl FromStr for Group {
     fn from_str(line: &str) -> Result<Self, Self::Err> {
         let elements: Vec<String> = line.split(':').map(ToString::to_string).collect();
         if elements.len() == 4 {
-            Ok(Self::new(RefCell::new(Inner {
-                source: line,
+            Ok(Group {
+                source: line.to_owned(),
                 groupname: Groupname::try_from(elements.get(0).unwrap().to_string())?,
                 password: crate::Password::Disabled,
                 gid: crate::Gid::try_from(elements.get(2).unwrap().to_string())?,
                 members: parse_members_list(elements.get(3).unwrap()),
-            })))
+            })
         } else {
             Err(format!(
                 "Failed to parse: not enough elements ({}): {:?}",
@@ -206,19 +205,19 @@ fn parse_members_list(source: &str) -> Vec<Membership> {
 #[test]
 fn test_parse_and_back_identity() {
     let line = "teste:x:1002:test,teste";
-    let line2: Group = Group::new_from_string(line.to_owned(), 0).unwrap();
-    assert_eq!(format!("{}", line2.borrow()), line);
+    let line2: Group = line.parse().unwrap();
+    assert_eq!(format!("{}", line2), line);
 }
 
 #[test]
 fn test_groupname() {
     let line = "teste:x:1002:test,teste";
-    let line2 = Group::new_from_string(line.to_owned(), 0).unwrap();
-    assert_eq!(line2.borrow().get_groupname().unwrap(), "teste");
+    let line2: Group = line.parse().unwrap();
+    assert_eq!(line2.get_groupname().unwrap(), "teste");
 }
 #[test]
 fn test_root_group() {
     let line = "root:x:0:";
-    let line2 = Group::new_from_string(line.to_owned(), 0).unwrap();
-    assert_eq!(line2.borrow().get_groupname().unwrap(), "root");
+    let line2: Group = line.parse().unwrap();
+    assert_eq!(line2.get_groupname().unwrap(), "root");
 }

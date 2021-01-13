@@ -3,7 +3,7 @@
 //! No special checks are made. Usually one single such action does not make sense and should only be used in combination with others.
 //! All operations implement [`super::ExecutableUnit`]. The structs in this module are only visible to [oplog](`super`).
 
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{Group, User, UserLibError};
 
@@ -120,7 +120,7 @@ fn test_add_shadow_line() {
     );
 }
 
-pub(super) struct AddGroupLine(pub Group);
+pub(super) struct AddGroupLine(pub Rc<RefCell<Group>>);
 impl ExecutableAtom for AddGroupLine {
     fn execute(self, mut content: String) -> Result<String, UserLibError> {
         let selfline = self.0.borrow().to_string();
@@ -131,10 +131,9 @@ impl ExecutableAtom for AddGroupLine {
 }
 #[test]
 fn test_add_group_line() {
-    use crate::userlib::NewFromString;
     let content = String::new();
     let line = "teste:x:1002:test,teste";
-    let group = Group::new_from_string(line.to_owned(), 0).unwrap();
+    let group = Rc::new(RefCell::new(line.parse().unwrap()));
     let apl = AddGroupLine(Rc::clone(&group));
 
     // test first user adding
@@ -156,7 +155,7 @@ fn test_add_group_line() {
     }
 
     // add a third and different user
-    let second_user = Group::new_from_string("haenno:x:1002:test,teste".to_owned(), 0).unwrap();
+    let second_user = Rc::new(RefCell::new("haenno:x:1002:test,teste".parse().unwrap()));
     let apl3 = AddGroupLine(Rc::clone(&second_user));
     let result_third = apl3.execute(result_second).unwrap();
     // verify the number of lines
@@ -293,7 +292,7 @@ defaultusername:!!:0:0:99999:7:::"
     )
 }
 
-pub(super) struct DeleteGroupLine(Group);
+pub(super) struct DeleteGroupLine(Rc<RefCell<Group>>);
 impl ExecutableAtom for DeleteGroupLine {
     fn execute(self, content: String) -> Result<String, UserLibError> {
         let selfline = self.0.borrow().to_string();
@@ -316,10 +315,9 @@ impl ExecutableAtom for DeleteGroupLine {
 }
 #[test]
 fn test_delete_group_line() {
-    use crate::userlib::NewFromString;
     let content = String::new();
     let line = "teste:x:1002:test,teste";
-    let group = Group::new_from_string(line.to_owned(), 0).unwrap();
+    let group = Rc::new(RefCell::new(line.parse().unwrap()));
     let add_group_line = AddGroupLine(Rc::clone(&group));
     let delete_group_line = DeleteGroupLine(Rc::clone(&group));
 

@@ -7,8 +7,10 @@ use crate::UserLibError;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use std::{
+    cell::RefCell,
     cmp::Ordering,
     fmt::{self, Display},
+    rc::Rc,
 };
 use std::{convert::TryFrom, str::FromStr};
 
@@ -26,6 +28,7 @@ impl PartialOrd for Position {
         match (self, other) {
             (At(n), At(o)) => Some(n.cmp(&o)),
             (NewToFile, _) => Some(Ordering::Greater),
+            (At(_), NewToFile) => Some(Ordering::Less),
             (NotInFile, _) | (_, NotInFile) | (NotAssignedYet, _) | (_, NotAssignedYet) => None,
         }
     }
@@ -43,7 +46,7 @@ pub struct User {
     gecos: crate::Gecos,                  /* Real name.  */
     home_dir: crate::HomeDir,             /* Home directory.  */
     shell_path: crate::ShellPath,         /* Shell program.  */
-    groups: Vec<(crate::group::MembershipKind, crate::Group)>,
+    groups: Vec<(crate::group::MembershipKind, Rc<RefCell<crate::Group>>)>,
 }
 
 impl User {
@@ -93,14 +96,16 @@ impl User {
     pub fn add_group(
         &mut self,
         group_type: crate::group::MembershipKind,
-        group: crate::Group,
+        group: Rc<RefCell<crate::Group>>,
     ) -> &mut Self {
         self.groups.push((group_type, group));
         self
     }
 
     #[must_use]
-    pub const fn get_groups(&self) -> &Vec<(crate::group::MembershipKind, crate::Group)> {
+    pub const fn get_groups(
+        &self,
+    ) -> &Vec<(crate::group::MembershipKind, Rc<RefCell<crate::Group>>)> {
         &self.groups
     }
 }
@@ -212,15 +217,19 @@ impl PartialOrd for User {
     }
 }
 
+impl Ord for User {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cmp(other)
+    }
+}
+
 impl Default for User {
     fn default() -> Self {
         let username = passwd_fields::Username {
             username: "defaultusername".to_owned(),
         };
         let line = "defaultusername:!!:0:0:99999:7:::";
-        let password = passwd_fields::Password::Shadow(
-            shadow_fields::Shadow::new_from_string(line.to_owned(), u32::MAX).unwrap(),
-        );
+        let password = passwd_fields::Password::Shadow(line.parse().unwrap());
         Self {
             source: "".to_owned(),
             pos: Position::NewToFile,

@@ -1,6 +1,6 @@
 //! Actions are collections of atoms to compose a usefull action to add, modify or delete a user.
 
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{userlib::files::FileContents, Group, User};
 
@@ -25,11 +25,11 @@ impl ExecutableUnit for AddUserAction {
 }
 
 impl AddUserAction {
-    pub fn new(user: &Rc<User>, group: &Group) -> Self {
+    pub fn new(user: &Rc<User>, group: Rc<RefCell<Group>>) -> Self {
         Self {
             pwd: AddPasswdLine(Rc::clone(user)),
             shd: AddShadowLine(Rc::clone(user)),
-            grp: AddGroupLine(Rc::clone(group)),
+            grp: AddGroupLine(Rc::clone(&group)),
         }
     }
 }
