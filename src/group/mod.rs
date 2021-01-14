@@ -3,8 +3,8 @@
 use log::warn;
 
 use crate::UserLibError;
-use std::{cell::RefCell, convert::TryFrom, str::FromStr};
-use std::{cmp::Eq, rc::Rc};
+use std::{convert::TryFrom, str::FromStr};
+use std::{cmp::Eq};
 use std::{
     cmp::Ordering,
     fmt::{self, Debug, Display},

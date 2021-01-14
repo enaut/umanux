@@ -213,13 +213,13 @@ impl crate::api::UserRead for User {
 
 impl PartialOrd for User {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.partial_cmp(other)
+        todo!("self.partial_cmp(other) {}", other)
     }
 }
 
 impl Ord for User {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.cmp(other)
+        todo!("self.cmp(other) {}", other)
     }
 }
 
@@ -321,7 +321,7 @@ fn test_parse_passwd() {
     let file = File::open("/etc/passwd").unwrap();
     let reader = BufReader::new(file);
 
-    for (n, line) in reader.lines().enumerate() {
+    for line in reader.lines() {
         let lineorig: String = line.unwrap();
         let pass_struc: User = lineorig.parse().unwrap();
         assert_eq!(

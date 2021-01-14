@@ -8,7 +8,7 @@ use crate::{
         CreateUserArgs, DeleteHome, DeleteUserArgs, GroupRead, UserDBRead, UserDBWrite, UserRead,
     },
     group::MembershipKind,
-    Group, UserLibError,
+    Group, Shadow, User, UserLibError,
 };
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -17,11 +17,12 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufReader, Read},
+    ops::Deref,
     rc::Rc,
     str::FromStr,
 };
 
-pub type UserList = HashMap<String, crate::User>;
+pub type UserList = HashMap<String, Numbered<User>>;
 
 pub struct UserDBLocal {
     source_files: Option<files::Files>,
@@ -37,9 +38,9 @@ impl UserDBLocal {
         shadow_content: &str,
         group_content: &str,
     ) -> Result<Self, UserLibError> {
-        let shadow_entries: Vec<crate::Shadow> = string_to(shadow_content)?;
+        let shadow_entries: Vec<Numbered<Shadow>> = string_to(shadow_content)?;
         let mut users = user_vec_to_hashmap(string_to(passwd_content)?);
-        let mut groups: Vec<Rc<RefCell<Group>>> = string_to::<Group>(group_content)?
+        let groups: Vec<Rc<RefCell<Numbered<Group>>>> = string_to::<Group>(group_content)?
             .into_iter()
             .map(|x| Rc::new(RefCell::new(x)))
             .collect();
@@ -67,8 +68,8 @@ impl UserDBLocal {
         };
 
         let mut users = user_vec_to_hashmap(string_to(&my_passwd_lines)?);
-        let passwds: Vec<crate::Shadow> = string_to(&my_shadow_lines)?;
-        let mut groups: Vec<Rc<RefCell<crate::Group>>> = string_to::<Group>(&my_group_lines)?
+        let passwds: Vec<Shadow> = string_to(&my_shadow_lines)?;
+        let groups: Vec<Rc<RefCell<crate::Group>>> = string_to::<Group>(&my_group_lines)?
             .into_iter()
             .map(|x| Rc::new(RefCell::new(x)))
             .collect();
@@ -81,7 +82,7 @@ impl UserDBLocal {
         })
     }
     fn delete_from_passwd(
-        user: &crate::User,
+        user: &User,
         locked_p: &mut files::LockedFileGuard,
     ) -> Result<(), UserLibError> {
         let passwd_file_content = file_to_string(&locked_p.file.borrow_mut())?;
@@ -96,7 +97,7 @@ impl UserDBLocal {
     }
 
     fn delete_from_shadow(
-        user: &crate::User,
+        user: &User,
         locked_s: &mut files::LockedFileGuard,
     ) -> Result<(), UserLibError> {
         let shad = user.get_shadow();
@@ -157,7 +158,7 @@ impl UserDBLocal {
         }
     }
 
-    fn delete_home(user: &crate::User) -> std::io::Result<()> {
+    fn delete_home(user: &User) -> std::io::Result<()> {
         if let Some(dir) = user.get_home_dir() {
             std::fs::remove_dir_all(dir)
         } else {
@@ -177,7 +178,7 @@ impl UserDBLocal {
 }
 
 impl UserDBWrite for UserDBLocal {
-    fn delete_user(&mut self, args: DeleteUserArgs) -> Result<crate::User, UserLibError> {
+    fn delete_user(&mut self, args: DeleteUserArgs) -> Result<User, UserLibError> {
         // try to get the user from the database
         let user_opt = self.get_user_by_name(args.username);
         let user = match user_opt {
@@ -279,11 +280,11 @@ impl UserDBWrite for UserDBLocal {
         }
     }
 
-    fn new_user(&mut self, args: CreateUserArgs) -> Result<&crate::User, crate::UserLibError> {
+    fn new_user(&mut self, args: CreateUserArgs) -> Result<&User, crate::UserLibError> {
         if self.users.contains_key(args.username) {
             Err(format!("The username {} already exists! Aborting!", args.username).into())
         } else {
-            let mut new_user = crate::User::default();
+            let mut new_user = User::default();
             new_user.username(args.username.to_owned());
             if self.users.contains_key(args.username) {
                 Err("Failed to create the user. A user with the same Name already exists".into())
@@ -314,7 +315,7 @@ impl UserDBWrite for UserDBLocal {
         }
     }
 
-    fn delete_group(&mut self, group: Rc<RefCell<Group>>) -> Result<(), UserLibError> {
+    fn delete_group(&mut self, _group: Rc<RefCell<Group>>) -> Result<(), UserLibError> {
         todo!()
     }
 
@@ -324,17 +325,17 @@ impl UserDBWrite for UserDBLocal {
 }
 
 impl UserDBRead for UserDBLocal {
-    fn get_all_users(&self) -> Vec<&crate::User> {
-        let mut res: Vec<&crate::User> = self.users.iter().map(|(_, x)| x).collect();
+    fn get_all_users(&self) -> Vec<&User> {
+        let mut res: Vec<&User> = self.users.iter().map(|(_, x)| x).collect();
         res.sort();
         res
     }
 
-    fn get_user_by_name(&self, name: &str) -> Option<&crate::User> {
+    fn get_user_by_name(&self, name: &str) -> Option<&User> {
         self.users.get(name)
     }
 
-    fn get_user_by_id(&self, uid: u32) -> Option<&crate::User> {
+    fn get_user_by_id(&self, uid: u32) -> Option<&User> {
         // could probably be more efficient - on the other hand its no problem to loop a thousand users.
         for user in self.users.values() {
             if user.get_uid() == uid {
@@ -460,7 +461,7 @@ fn groups_to_users<'a>(
 }
 
 /// Merge the Shadow passwords into the users
-fn shadow_to_users(users: &mut UserList, shadow: Vec<crate::Shadow>) -> &mut UserList {
+fn shadow_to_users(users: &mut UserList, shadow: Vec<Numbered<Shadow>>) -> &mut UserList {
     for pass in shadow {
         let user = users
             .get_mut(pass.get_username())
@@ -471,7 +472,7 @@ fn shadow_to_users(users: &mut UserList, shadow: Vec<crate::Shadow>) -> &mut Use
 }
 
 /// Convert a `Vec<crate::User>` to a `UserList` (`HashMap<String, crate::User>`) where the username is used as key
-fn user_vec_to_hashmap(users: Vec<crate::User>) -> UserList {
+fn user_vec_to_hashmap(users: Vec<Numbered<User>>) -> UserList {
     users
         .into_iter()
         .map(|x| {
@@ -485,6 +486,37 @@ fn user_vec_to_hashmap(users: Vec<crate::User>) -> UserList {
         .collect()
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct Numbered<T> {
+    pos: usize,
+    value: T,
+}
+
+impl<T> Ord for Numbered<T>
+where
+    T: Eq,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.pos.cmp(&other.pos)
+    }
+}
+
+impl<T> PartialOrd for Numbered<T>
+where
+    T: Eq,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.pos.partial_cmp(&other.pos)
+    }
+}
+
+impl<T> Deref for Numbered<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
 /// Try to parse a String into some Object.
 ///
 /// # Errors
@@ -494,7 +526,7 @@ pub trait LineNumerable {
 }
 
 /// A generic function that parses a string line by line and creates the appropriate `Vec<T>` requested by the type system.
-fn string_to<T>(source: &str) -> Result<Vec<T>, T::Err>
+fn string_to<T>(source: &str) -> Result<Vec<Numbered<T>>, T::Err>
 where
     T: FromStr,
 {
@@ -502,6 +534,11 @@ where
         .to_owned()
         .lines()
         .map(|line| line.parse::<T>())
+        .enumerate()
+        .map(|(pos, item)| match item {
+            Ok(value) => Ok(Numbered { pos, value }),
+            Err(e) => Err(e),
+        })
         .collect()
 }
 
