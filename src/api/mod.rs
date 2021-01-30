@@ -5,13 +5,15 @@ use std::{cell::RefCell, rc::Rc};
 
 pub use createuser_args::{CreateHome, CreatePrimaryGroup, CreateUserArgs};
 pub use deleteuser_args::{DeleteHome, DeletePrimaryGroup, DeleteUserArgs};
+
+use crate::{userlib::Numbered, Group, User};
 pub trait UserDBRead {
-    fn get_all_users(&self) -> Vec<&crate::User>;
-    fn get_user_by_name(&self, name: &str) -> Option<&crate::User>;
-    fn get_user_by_id(&self, uid: u32) -> Option<&crate::User>;
-    fn get_all_groups(&self) -> Vec<Rc<RefCell<crate::Group>>>;
-    fn get_group_by_name(&self, name: &str) -> Option<Rc<RefCell<crate::Group>>>;
-    fn get_group_by_id(&self, name: u32) -> Option<Rc<RefCell<crate::Group>>>;
+    fn get_all_users(&self) -> Vec<&User>;
+    fn get_user_by_name(&self, name: &str) -> Option<&User>;
+    fn get_user_by_id(&self, uid: u32) -> Option<&User>;
+    fn get_all_groups(&self) -> Vec<Rc<RefCell<Numbered<Group>>>>;
+    fn get_group_by_name(&self, name: &str) -> Option<Rc<RefCell<Numbered<Group>>>>;
+    fn get_group_by_id(&self, name: u32) -> Option<Rc<RefCell<Numbered<Group>>>>;
 }
 
 pub trait UserDBValidation {
@@ -22,8 +24,11 @@ pub trait UserDBValidation {
 }
 
 pub trait UserDBWrite {
-    fn delete_user(&mut self, params: DeleteUserArgs) -> Result<crate::User, crate::UserLibError>;
-    fn new_user(&mut self, params: CreateUserArgs) -> Result<&crate::User, crate::UserLibError>;
+    fn delete_user(
+        &mut self,
+        params: DeleteUserArgs,
+    ) -> Result<Numbered<User>, crate::UserLibError>;
+    fn new_user(&mut self, params: CreateUserArgs) -> Result<&Numbered<User>, crate::UserLibError>;
     fn delete_group(&mut self, group: Rc<RefCell<crate::Group>>)
         -> Result<(), crate::UserLibError>;
     fn new_group(&mut self) -> Result<Rc<RefCell<crate::Group>>, crate::UserLibError>;

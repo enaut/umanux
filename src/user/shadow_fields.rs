@@ -88,11 +88,8 @@ impl FromStr for Shadow {
     ///
     /// # Example
     /// ```
-    /// use umanux::NewFromString;
-    /// let shad = umanux::Shadow::new_from_string(
-    ///     "test:$6$u0Hh.9WKRF1Aeu4g$XqoDyL6Re/4ZLNQCGAXlNacxCxbdigexEqzFzkOVPV5Z1H23hlenjW8ZLgq6GQtFURYwenIFpo1c.r4aW9l5S/:18260:0:99999:7:::".to_string(),
-    ///     0,
-    /// ).unwrap();
+    /// use std::str::FromStr;
+    /// let shad: umanux::Shadow = "test:$6$u0Hh.9WKRF1Aeu4g$XqoDyL6Re/4ZLNQCGAXlNacxCxbdigexEqzFzkOVPV5Z1H23hlenjW8ZLgq6GQtFURYwenIFpo1c.r4aW9l5S/:18260:0:99999:7:::".parse().unwrap();
     /// assert_eq!(shad.get_username(), "test");
     /// ```
     ///

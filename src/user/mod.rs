@@ -3,7 +3,7 @@ pub mod gecos_fields;
 pub mod passwd_fields;
 pub mod shadow_fields;
 
-use crate::UserLibError;
+use crate::{userlib::Numbered, Group, Shadow, UserLibError};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use std::{
@@ -46,12 +46,12 @@ pub struct User {
     gecos: crate::Gecos,                  /* Real name.  */
     home_dir: crate::HomeDir,             /* Home directory.  */
     shell_path: crate::ShellPath,         /* Shell program.  */
-    groups: Vec<(crate::group::MembershipKind, Rc<RefCell<crate::Group>>)>,
+    groups: Vec<(crate::group::MembershipKind, Rc<RefCell<Numbered<Group>>>)>,
 }
 
 impl User {
     #[must_use]
-    pub const fn get_shadow(&self) -> Option<&crate::Shadow> {
+    pub fn get_shadow(&self) -> Option<&crate::Shadow> {
         match self.password {
             crate::Password::Encrypted(_) | crate::Password::Disabled => None,
             crate::Password::Shadow(ref s) => Some(s),
@@ -96,7 +96,7 @@ impl User {
     pub fn add_group(
         &mut self,
         group_type: crate::group::MembershipKind,
-        group: Rc<RefCell<crate::Group>>,
+        group: Rc<RefCell<Numbered<Group>>>,
     ) -> &mut Self {
         self.groups.push((group_type, group));
         self
@@ -105,7 +105,10 @@ impl User {
     #[must_use]
     pub const fn get_groups(
         &self,
-    ) -> &Vec<(crate::group::MembershipKind, Rc<RefCell<crate::Group>>)> {
+    ) -> &Vec<(
+        crate::group::MembershipKind,
+        Rc<RefCell<Numbered<crate::Group>>>,
+    )> {
         &self.groups
     }
 }
@@ -117,7 +120,7 @@ impl FromStr for User {
     /// # Example
     /// ```
     /// use crate::umanux::api::UserRead;
-    /// use umanux::NewFromString;
+    /// use std::str::FromStr;
     /// let pwd:umanux::User =
     ///     "testuser:testpassword:1001:1001:full Name,,,,:/home/test:/bin/test".parse().unwrap();
     /// assert_eq!(pwd.get_username().unwrap(), "testuser");
@@ -160,7 +163,10 @@ impl crate::api::UserRead for User {
     fn get_password(&self) -> Option<&str> {
         match &self.password {
             crate::Password::Encrypted(crate::EncryptedPassword { password }) => Some(password),
-            crate::Password::Shadow(crate::Shadow { ref password, .. }) => Some(&password.password),
+            crate::Password::Shadow(Numbered {
+                value: Shadow { ref password, .. },
+                ..
+            }) => Some(&password.password),
             crate::Password::Disabled => None,
         }
     }
@@ -213,7 +219,7 @@ impl crate::api::UserRead for User {
 
 impl PartialOrd for User {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        todo!("self.partial_cmp(other) {}", other)
+        self.uid.partial_cmp(&other.uid)
     }
 }
 
@@ -225,11 +231,14 @@ impl Ord for User {
 
 impl Default for User {
     fn default() -> Self {
+        const LINE: &str = "defaultusername:!!:0:0:99999:7:::";
         let username = passwd_fields::Username {
             username: "defaultusername".to_owned(),
         };
-        let line = "defaultusername:!!:0:0:99999:7:::";
-        let password = passwd_fields::Password::Shadow(line.parse().unwrap());
+        let password = passwd_fields::Password::Shadow(Numbered {
+            pos: usize::max_value(),
+            value: LINE.parse().unwrap(),
+        });
         Self {
             source: "".to_owned(),
             pos: Position::NewToFile,

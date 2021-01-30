@@ -31,7 +31,7 @@ fn main() -> Result<(), UserLibError> {
     let gr_res = db.get_all_groups();
     for group in gr_res {
         let gp = group.borrow();
-        println!("{}", gp);
+        println!("{}", gp.value);
         println!("{:?}", gp.get_member_names())
     }
     Ok(())

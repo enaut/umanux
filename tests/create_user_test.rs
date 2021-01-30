@@ -1,6 +1,7 @@
 #[path = "../src/tests/mod.rs"]
 mod tests;
 use tests::testfiles::Fixture;
+use umanux::userlib::Numbered;
 
 extern crate test_bin;
 extern crate umanux;
@@ -26,7 +27,7 @@ fn test_create_user_function() {
 
     let mut db = umanux::UserDBLocal::load_files(mf).unwrap();
 
-    let user_res: Result<&umanux::User, umanux::UserLibError> = db.new_user(
+    let user_res: Result<&Numbered<umanux::User>, umanux::UserLibError> = db.new_user(
         umanux::api::CreateUserArgs::builder()
             .username("test2")
             // .delete_home(umanux::api::DeleteHome::Delete)

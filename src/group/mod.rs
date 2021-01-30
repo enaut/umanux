@@ -3,12 +3,12 @@
 use log::warn;
 
 use crate::UserLibError;
-use std::{convert::TryFrom, str::FromStr};
-use std::{cmp::Eq};
+use std::cmp::Eq;
 use std::{
     cmp::Ordering,
     fmt::{self, Debug, Display},
 };
+use std::{convert::TryFrom, str::FromStr};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd)]
 pub enum MembershipKind {
@@ -153,12 +153,10 @@ impl FromStr for Group {
     /// # Example
     /// ```
     /// use crate::umanux::api::GroupRead;
-    /// use umanux::NewFromString;
-    /// let grp = umanux::Group::new_from_string(
-    ///     "teste:x:1002:test,teste".to_owned(),
-    ///     0,
-    /// ).unwrap();
-    /// assert_eq!(grp.borrow().get_groupname().unwrap(), "teste");
+    /// use std::str::FromStr;
+    /// let grp: umanux::Group =
+    ///     "teste:x:1002:test,teste".parse().unwrap();
+    /// assert_eq!(grp.get_groupname().unwrap(), "teste");
     /// ```
     ///
     /// # Errors

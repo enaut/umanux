@@ -1,8 +1,8 @@
 extern crate umanux;
 
 use clap::{App, Arg};
-use umanux::api::UserRead;
 use umanux::{api::UserDBWrite, UserLibError};
+use umanux::{api::UserRead, userlib::Numbered};
 
 extern crate env_logger;
 #[allow(unused_imports)]
@@ -66,7 +66,7 @@ fn main() -> Result<(), UserLibError> {
 
     let mut db = umanux::UserDBLocal::load_files(mf).unwrap();
 
-    let user_res: Result<umanux::User, umanux::UserLibError> = db.delete_user(
+    let user_res: Result<Numbered<umanux::User>, umanux::UserLibError> = db.delete_user(
         umanux::api::DeleteUserArgs::builder()
             .username(matches.value_of("username").unwrap())
             .delete_home(if matches.is_present("remove_home") {

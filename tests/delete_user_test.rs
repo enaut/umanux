@@ -1,6 +1,7 @@
 #[path = "../src/tests/mod.rs"]
 mod tests;
 use tests::testfiles::Fixture;
+use umanux::userlib::Numbered;
 
 extern crate umanux;
 
@@ -24,7 +25,7 @@ fn test_delete_user_function() {
 
     let mut db = umanux::UserDBLocal::load_files(mf).unwrap();
 
-    let user_res: Result<umanux::User, umanux::UserLibError> = db.delete_user(
+    let user_res: Result<Numbered<umanux::User>, umanux::UserLibError> = db.delete_user(
         umanux::api::DeleteUserArgs::builder()
             .username("teste")
             // .delete_home(umanux::api::DeleteHome::Delete)
@@ -56,7 +57,7 @@ fn test_delete_user_function() {
     }
 
     // delete the user test
-    let user_res_test: Result<umanux::User, umanux::UserLibError> = db.delete_user(
+    let user_res_test: Result<Numbered<umanux::User>, umanux::UserLibError> = db.delete_user(
         umanux::api::DeleteUserArgs::builder()
             .username("test")
             // .delete_home(umanux::api::DeleteHome::Delete)

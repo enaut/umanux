@@ -3,7 +3,7 @@
 use log::warn;
 use regex::Regex;
 
-use crate::UserLibError;
+use crate::{userlib::Numbered, Shadow, UserLibError};
 use std::cmp::Eq;
 use std::convert::TryFrom;
 use std::fmt::{self, Display};
@@ -50,7 +50,7 @@ pub(crate) fn is_username_valid(name: &str) -> bool {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Password {
     Encrypted(crate::EncryptedPassword),
-    Shadow(crate::Shadow),
+    Shadow(Numbered<Shadow>),
     Disabled,
 }
 
@@ -103,6 +103,12 @@ impl TryFrom<String> for Uid {
         Ok(Self {
             uid: source.parse::<u32>().unwrap(),
         })
+    }
+}
+
+impl PartialOrd for Uid {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.uid.partial_cmp(&other.uid)
     }
 }
 

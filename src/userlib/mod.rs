@@ -17,7 +17,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufReader, Read},
-    ops::Deref,
+    ops::{Deref, DerefMut},
     rc::Rc,
     str::FromStr,
 };
@@ -27,7 +27,7 @@ pub type UserList = HashMap<String, Numbered<User>>;
 pub struct UserDBLocal {
     source_files: Option<files::Files>,
     pub users: UserList,
-    pub groups: Vec<Rc<RefCell<crate::Group>>>,
+    pub groups: Vec<Rc<RefCell<Numbered<Group>>>>,
 }
 
 impl UserDBLocal {
@@ -68,8 +68,8 @@ impl UserDBLocal {
         };
 
         let mut users = user_vec_to_hashmap(string_to(&my_passwd_lines)?);
-        let passwds: Vec<Shadow> = string_to(&my_shadow_lines)?;
-        let groups: Vec<Rc<RefCell<crate::Group>>> = string_to::<Group>(&my_group_lines)?
+        let passwds: Vec<Numbered<Shadow>> = string_to(&my_shadow_lines)?;
+        let groups: Vec<Rc<RefCell<Numbered<Group>>>> = string_to::<Group>(&my_group_lines)?
             .into_iter()
             .map(|x| Rc::new(RefCell::new(x)))
             .collect();
@@ -121,7 +121,7 @@ impl UserDBLocal {
     }
 
     fn delete_from_group(
-        group: Rc<RefCell<crate::Group>>,
+        group: Rc<RefCell<Numbered<Group>>>,
         locked_g: &mut files::LockedFileGuard,
     ) -> Result<(), UserLibError> {
         let group_file_content = file_to_string(&locked_g.file.borrow_mut())?;
@@ -178,7 +178,7 @@ impl UserDBLocal {
 }
 
 impl UserDBWrite for UserDBLocal {
-    fn delete_user(&mut self, args: DeleteUserArgs) -> Result<User, UserLibError> {
+    fn delete_user(&mut self, args: DeleteUserArgs) -> Result<Numbered<User>, UserLibError> {
         // try to get the user from the database
         let user_opt = self.get_user_by_name(args.username);
         let user = match user_opt {
@@ -280,7 +280,7 @@ impl UserDBWrite for UserDBLocal {
         }
     }
 
-    fn new_user(&mut self, args: CreateUserArgs) -> Result<&User, crate::UserLibError> {
+    fn new_user(&mut self, args: CreateUserArgs) -> Result<&Numbered<User>, crate::UserLibError> {
         if self.users.contains_key(args.username) {
             Err(format!("The username {} already exists! Aborting!", args.username).into())
         } else {
@@ -306,7 +306,13 @@ impl UserDBWrite for UserDBLocal {
                 }
                 assert!(self
                     .users
-                    .insert(args.username.to_owned(), new_user)
+                    .insert(
+                        args.username.to_owned(),
+                        Numbered {
+                            pos: usize::max_value(),
+                            value: new_user
+                        }
+                    )
                     .is_none());
                 self.users
                     .get(args.username)
@@ -326,30 +332,30 @@ impl UserDBWrite for UserDBLocal {
 
 impl UserDBRead for UserDBLocal {
     fn get_all_users(&self) -> Vec<&User> {
-        let mut res: Vec<&User> = self.users.iter().map(|(_, x)| x).collect();
+        let mut res: Vec<&User> = self.users.iter().map(|(_, x)| &x.value).collect();
         res.sort();
         res
     }
 
     fn get_user_by_name(&self, name: &str) -> Option<&User> {
-        self.users.get(name)
+        self.users.get(name).map(|num| &num.value)
     }
 
     fn get_user_by_id(&self, uid: u32) -> Option<&User> {
         // could probably be more efficient - on the other hand its no problem to loop a thousand users.
         for user in self.users.values() {
             if user.get_uid() == uid {
-                return Some(user);
+                return Some(&user.value);
             }
         }
         None
     }
 
-    fn get_all_groups(&self) -> Vec<Rc<RefCell<crate::Group>>> {
-        self.groups.iter().map(std::clone::Clone::clone).collect()
+    fn get_all_groups(&self) -> Vec<Rc<RefCell<Numbered<Group>>>> {
+        self.groups.iter().map(Clone::clone).collect()
     }
 
-    fn get_group_by_name(&self, name: &str) -> Option<Rc<RefCell<crate::Group>>> {
+    fn get_group_by_name(&self, name: &str) -> Option<Rc<RefCell<Numbered<Group>>>> {
         for group in &self.groups {
             if group.borrow().get_groupname()? == name {
                 return Some(Rc::clone(group));
@@ -358,7 +364,7 @@ impl UserDBRead for UserDBLocal {
         None
     }
 
-    fn get_group_by_id(&self, id: u32) -> Option<Rc<RefCell<crate::Group>>> {
+    fn get_group_by_id(&self, id: u32) -> Option<Rc<RefCell<Numbered<Group>>>> {
         for group in &self.groups {
             if group.borrow().get_gid()? == id {
                 return Some(Rc::clone(group));
@@ -412,7 +418,7 @@ fn file_to_string(file: &File) -> Result<String, crate::UserLibError> {
 
 fn groups_to_users<'a>(
     users: &'a mut UserList,
-    groups: &Vec<Rc<RefCell<crate::Group>>>,
+    groups: &Vec<Rc<RefCell<Numbered<Group>>>>,
 ) -> &'a mut UserList {
     // Populate the regular groups
 
@@ -432,7 +438,7 @@ fn groups_to_users<'a>(
     // Populate the primary membership
     for user in users.values_mut() {
         let gid = user.get_gid();
-        let grouplist: Vec<Rc<RefCell<crate::Group>>> = groups
+        let grouplist: Vec<Rc<RefCell<Numbered<Group>>>> = groups
             .iter()
             .filter_map(|g| {
                 if g.borrow().get_gid().unwrap() == gid {
@@ -486,15 +492,18 @@ fn user_vec_to_hashmap(users: Vec<Numbered<User>>) -> UserList {
         .collect()
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct Numbered<T> {
-    pos: usize,
-    value: T,
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Numbered<T>
+where
+    T: Clone,
+{
+    pub pos: usize,
+    pub value: T,
 }
 
 impl<T> Ord for Numbered<T>
 where
-    T: Eq,
+    T: Eq + Clone,
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.pos.cmp(&other.pos)
@@ -503,20 +512,33 @@ where
 
 impl<T> PartialOrd for Numbered<T>
 where
-    T: Eq,
+    T: Eq + Clone,
 {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.pos.partial_cmp(&other.pos)
     }
 }
 
-impl<T> Deref for Numbered<T> {
+impl<T> Deref for Numbered<T>
+where
+    T: Clone,
+{
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.value
     }
 }
+
+impl<T> DerefMut for Numbered<T>
+where
+    T: Clone,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
 /// Try to parse a String into some Object.
 ///
 /// # Errors
@@ -528,7 +550,7 @@ pub trait LineNumerable {
 /// A generic function that parses a string line by line and creates the appropriate `Vec<T>` requested by the type system.
 fn string_to<T>(source: &str) -> Result<Vec<Numbered<T>>, T::Err>
 where
-    T: FromStr,
+    T: FromStr + Clone,
 {
     source
         .to_owned()
