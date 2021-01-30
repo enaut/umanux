@@ -24,9 +24,9 @@ pub enum Position {
 
 impl PartialOrd for Position {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        use Position::*;
+        use Position::{At, NewToFile, NotAssignedYet, NotInFile};
         match (self, other) {
-            (At(n), At(o)) => Some(n.cmp(&o)),
+            (At(n), At(o)) => Some(n.cmp(o)),
             (NewToFile, _) => Some(Ordering::Greater),
             (At(_), NewToFile) => Some(Ordering::Less),
             (NotInFile, _) | (_, NotInFile) | (NotAssignedYet, _) | (_, NotAssignedYet) => None,

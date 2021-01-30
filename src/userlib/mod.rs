@@ -32,7 +32,6 @@ pub struct UserDBLocal {
 
 impl UserDBLocal {
     /// Import the database from strings
-    #[must_use]
     pub fn import_from_strings(
         passwd_content: &str,
         shadow_content: &str,
@@ -121,7 +120,7 @@ impl UserDBLocal {
     }
 
     fn delete_from_group(
-        group: Rc<RefCell<Numbered<Group>>>,
+        group: &Rc<RefCell<Numbered<Group>>>,
         locked_g: &mut files::LockedFileGuard,
     ) -> Result<(), UserLibError> {
         let group_file_content = file_to_string(&locked_g.file.borrow_mut())?;
@@ -237,7 +236,8 @@ impl UserDBWrite for UserDBLocal {
                                     .expect("a group has to have a name")
                             );
                             Self::delete_from_group(
-                                self.get_group_by_id(group)
+                                &self
+                                    .get_group_by_id(group)
                                     .expect("The group does not exist"),
                                 &mut locked_g,
                             )?;
@@ -418,7 +418,7 @@ fn file_to_string(file: &File) -> Result<String, crate::UserLibError> {
 
 fn groups_to_users<'a>(
     users: &'a mut UserList,
-    groups: &Vec<Rc<RefCell<Numbered<Group>>>>,
+    groups: &[Rc<RefCell<Numbered<Group>>>],
 ) -> &'a mut UserList {
     // Populate the regular groups
 
@@ -555,7 +555,7 @@ where
     source
         .to_owned()
         .lines()
-        .map(|line| line.parse::<T>())
+        .map(str::parse)
         .enumerate()
         .map(|(pos, item)| match item {
             Ok(value) => Ok(Numbered { pos, value }),

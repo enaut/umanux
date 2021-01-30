@@ -59,7 +59,8 @@ fn main() -> Result<(), UserLibError> {
     let user = db
         .get_user_by_name(matches.value_of("username").unwrap())
         .expect("User not found");
-    Ok(println!("{}", display_user(user)))
+    println!("{}", display_user(user));
+    Ok(())
 }
 
 fn display_user(user: &User) -> String {

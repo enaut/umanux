@@ -25,11 +25,11 @@ impl ExecutableUnit for AddUserAction {
 }
 
 impl AddUserAction {
-    pub fn new(user: &Rc<User>, group: Rc<RefCell<Group>>) -> Self {
+    pub fn new(user: &Rc<User>, group: &Rc<RefCell<Group>>) -> Self {
         Self {
             pwd: AddPasswdLine(Rc::clone(user)),
             shd: AddShadowLine(Rc::clone(user)),
-            grp: AddGroupLine(Rc::clone(&group)),
+            grp: AddGroupLine(Rc::clone(group)),
         }
     }
 }

@@ -13,7 +13,7 @@ pub trait ExecutableUnit {
 }
 
 pub trait ValidatableUnit {
-    /// ValidatableUnits can validate the state to see if they are at all aplicable.
+    /// `ValidatableUnits` can validate the state to see if they are at all aplicable.
     fn validate(self, contents: FileContents, db: &UserDBLocal) -> Result<(), UserLibError>;
 }
 

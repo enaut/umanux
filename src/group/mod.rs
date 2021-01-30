@@ -10,24 +10,25 @@ use std::{
 };
 use std::{convert::TryFrom, str::FromStr};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum MembershipKind {
     Primary,
     Member,
 }
 
 impl Ord for MembershipKind {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self {
-            Self::Primary => match other {
-                Self::Primary => Ordering::Equal,
-                Self::Member => Ordering::Less,
-            },
-            Self::Member => match other {
-                Self::Primary => Ordering::Greater,
-                Self::Member => Ordering::Equal,
-            },
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::Primary, Self::Primary) | (Self::Member, Self::Member) => Ordering::Equal,
+            (Self::Primary, Self::Member) => Ordering::Less,
+            (Self::Member, Self::Primary) => Ordering::Greater,
         }
+    }
+}
+
+impl PartialOrd for MembershipKind {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -165,7 +166,7 @@ impl FromStr for Group {
     fn from_str(line: &str) -> Result<Self, Self::Err> {
         let elements: Vec<String> = line.split(':').map(ToString::to_string).collect();
         if elements.len() == 4 {
-            Ok(Group {
+            Ok(Self {
                 source: line.to_owned(),
                 groupname: Groupname::try_from(elements.get(0).unwrap().to_string())?,
                 password: crate::Password::Disabled,

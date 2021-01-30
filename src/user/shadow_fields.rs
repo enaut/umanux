@@ -23,7 +23,8 @@ impl Shadow {
     pub fn get_username(&self) -> &str {
         &self.username.username
     }
-    pub fn get_last_change(&self) -> Option<&chrono::NaiveDateTime> {
+    #[must_use]
+    pub const fn get_last_change(&self) -> Option<&chrono::NaiveDateTime> {
         self.last_change.as_ref()
     }
 
